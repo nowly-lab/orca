@@ -238,7 +238,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
         <div className="flex-1 min-w-0 flex flex-col gap-1.5">
           {/* Header row: Title and Checks */}
           <div className="flex items-center justify-between min-w-0 gap-2">
-            <div className="text-[13px] font-medium text-foreground/90 truncate leading-none">
+            <div className="text-[12px] font-semibold text-foreground truncate leading-tight">
               {worktree.displayName}
             </div>
 
@@ -288,7 +288,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
                   className="size-1.5 rounded-full"
                   style={{ backgroundColor: repo.badgeColor }}
                 />
-                <span className="text-[10px] font-medium text-foreground/70 truncate max-w-[6rem] leading-none">
+                <span className="text-[10px] font-semibold text-foreground truncate max-w-[6rem] leading-none lowercase">
                   {repo.displayName}
                 </span>
               </div>
@@ -302,7 +302,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
                 main
               </Badge>
             ) : (
-              <span className="text-[10.5px] text-muted-foreground/60 truncate font-mono leading-none tracking-normal">
+              <span className="text-[11px] text-muted-foreground truncate font-mono leading-none">
                 {branch}
               </span>
             )}

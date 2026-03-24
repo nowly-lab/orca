@@ -324,10 +324,10 @@ const WorktreeList = React.memo(function WorktreeList() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="truncate text-[11px] font-semibold tracking-[0.02em] uppercase text-muted-foreground/70 leading-none">
+                      <div className="truncate text-[13px] font-semibold leading-none lowercase">
                         {row.label}
                       </div>
-                      <div className="rounded-full bg-black/5 dark:bg-white/10 px-[5px] py-[1.5px] text-[8.5px] font-bold leading-none text-muted-foreground/70">
+                      <div className="rounded-full bg-black/12 px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground/90">
                         {row.count}
                       </div>
                     </div>
