@@ -48,12 +48,22 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({ worktree, 
   }, [worktree.id, worktree.isUnread, updateWorktreeMeta])
 
   const handleLinkIssue = useCallback(() => {
-    openModal('link-issue', { worktreeId: worktree.id, currentIssue: worktree.linkedIssue })
-  }, [worktree.id, worktree.linkedIssue, openModal])
+    openModal('edit-meta', {
+      worktreeId: worktree.id,
+      currentIssue: worktree.linkedIssue,
+      currentComment: worktree.comment,
+      focus: 'issue'
+    })
+  }, [worktree.id, worktree.linkedIssue, worktree.comment, openModal])
 
   const handleComment = useCallback(() => {
-    openModal('edit-comment', { worktreeId: worktree.id, currentComment: worktree.comment })
-  }, [worktree.id, worktree.comment, openModal])
+    openModal('edit-meta', {
+      worktreeId: worktree.id,
+      currentIssue: worktree.linkedIssue,
+      currentComment: worktree.comment,
+      focus: 'comment'
+    })
+  }, [worktree.id, worktree.linkedIssue, worktree.comment, openModal])
 
   const handleCloseTerminals = useCallback(async () => {
     await shutdownWorktreeTerminals(worktree.id)

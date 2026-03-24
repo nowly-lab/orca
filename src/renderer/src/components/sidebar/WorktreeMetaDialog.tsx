@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { parseGitHubIssueOrPRNumber } from '@/lib/github-links'
+import type { WorktreeMeta } from '../../../../shared/types'
 
 const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
   const activeModal = useAppStore((s) => s.activeModal)
@@ -18,20 +19,21 @@ const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
   const closeModal = useAppStore((s) => s.closeModal)
   const updateWorktreeMeta = useAppStore((s) => s.updateWorktreeMeta)
 
-  const isLinkIssue = activeModal === 'link-issue'
-  const isEditComment = activeModal === 'edit-comment'
-  const isOpen = isLinkIssue || isEditComment
+  const isEditMeta = activeModal === 'edit-meta'
+  const isOpen = isEditMeta
 
   const worktreeId = typeof modalData.worktreeId === 'string' ? modalData.worktreeId : ''
   const currentIssue =
     typeof modalData.currentIssue === 'number' ? String(modalData.currentIssue) : ''
   const currentComment =
     typeof modalData.currentComment === 'string' ? modalData.currentComment : ''
+  const focusField = typeof modalData.focus === 'string' ? modalData.focus : 'comment'
 
   const [issueInput, setIssueInput] = useState('')
   const [commentInput, setCommentInput] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const issueInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const prevIsOpenRef = useRef(false)
   if (isOpen && !prevIsOpenRef.current) {
@@ -50,20 +52,17 @@ const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
   }, [])
 
   useEffect(() => {
-    if (isEditComment) {
+    if (isEditMeta) {
       autoResize()
     }
-  }, [isEditComment, commentInput, autoResize])
+  }, [isEditMeta, commentInput, autoResize])
 
   const canSave = useMemo(() => {
     if (!worktreeId) {
       return false
     }
-    if (isLinkIssue) {
-      return issueInput.trim() === '' || parseGitHubIssueOrPRNumber(issueInput) !== null
-    }
-    return true
-  }, [worktreeId, isLinkIssue, issueInput])
+    return issueInput.trim() === '' || parseGitHubIssueOrPRNumber(issueInput) !== null
+  }, [worktreeId, issueInput])
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -80,28 +79,24 @@ const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
     }
     setSaving(true)
     try {
-      if (isLinkIssue) {
-        const trimmed = issueInput.trim()
-        const linkedIssueNumber = parseGitHubIssueOrPRNumber(trimmed)
-        if (trimmed === '' || linkedIssueNumber !== null) {
-          await updateWorktreeMeta(worktreeId, { linkedIssue: linkedIssueNumber })
-        }
-      } else if (isEditComment) {
-        await updateWorktreeMeta(worktreeId, { comment: commentInput.trim() })
+      const trimmedIssue = issueInput.trim()
+      const linkedIssueNumber = parseGitHubIssueOrPRNumber(trimmedIssue)
+      const finalLinkedIssue =
+        trimmedIssue === '' ? null : linkedIssueNumber !== null ? linkedIssueNumber : undefined
+
+      const updates: Partial<WorktreeMeta> = {
+        comment: commentInput.trim()
       }
+      if (finalLinkedIssue !== undefined) {
+        updates.linkedIssue = finalLinkedIssue
+      }
+
+      await updateWorktreeMeta(worktreeId, updates)
       closeModal()
     } finally {
       setSaving(false)
     }
-  }, [
-    worktreeId,
-    isLinkIssue,
-    isEditComment,
-    issueInput,
-    commentInput,
-    updateWorktreeMeta,
-    closeModal
-  ])
+  }, [worktreeId, issueInput, commentInput, updateWorktreeMeta, closeModal])
 
   const handleCommentKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -113,35 +108,52 @@ const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
     [handleSave]
   )
 
+  const handleIssueKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleSave()
+      }
+    },
+    [handleSave]
+  )
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-md"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          if (focusField === 'issue') {
+            issueInputRef.current?.focus()
+          } else {
+            textareaRef.current?.focus()
+          }
+        }}
+      >
         <DialogHeader>
-          <DialogTitle className="text-sm">
-            {isLinkIssue ? 'Link GH Issue/PR' : 'Edit Comment'}
-          </DialogTitle>
+          <DialogTitle className="text-sm">Edit Worktree Details</DialogTitle>
           <DialogDescription className="text-xs">
-            {isLinkIssue
-              ? 'Add an issue/PR number or URL to link this worktree. Leave blank to remove the link.'
-              : 'Add or edit notes for this worktree.'}
+            Edit the GitHub issue link and notes for this worktree.
           </DialogDescription>
         </DialogHeader>
 
-        {isLinkIssue ? (
+        <div className="space-y-4">
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground">GH Issue / PR</label>
             <Input
+              ref={issueInputRef}
               value={issueInput}
               onChange={(e) => setIssueInput(e.target.value)}
+              onKeyDown={handleIssueKeyDown}
               placeholder="Issue/PR # or GitHub URL"
               className="h-8 text-xs"
-              autoFocus
             />
             <p className="text-[10px] text-muted-foreground">
-              Paste an issue or PR URL, or enter a number.
+              Paste an issue or PR URL, or enter a number. Leave blank to remove the link.
             </p>
           </div>
-        ) : (
+
           <div className="space-y-1">
             <label className="text-[11px] font-medium text-muted-foreground">Comment</label>
             <textarea
@@ -151,14 +163,13 @@ const WorktreeMetaDialog = React.memo(function WorktreeMetaDialog() {
               onKeyDown={handleCommentKeyDown}
               placeholder="Notes about this worktree..."
               rows={3}
-              autoFocus
               className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 resize-none max-h-60 overflow-y-auto"
             />
             <p className="text-[10px] text-muted-foreground">
               Press Enter to save, Shift+Enter for a new line.
             </p>
           </div>
-        )}
+        </div>
 
         <DialogFooter>
           <Button

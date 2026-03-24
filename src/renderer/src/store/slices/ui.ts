@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { PersistedUIState, UpdateStatus } from '../../../../shared/types'
 
-export interface UISlice {
+export type UISlice = {
   sidebarOpen: boolean
   sidebarWidth: number
   toggleSidebar: () => void
@@ -10,7 +10,7 @@ export interface UISlice {
   setSidebarWidth: (width: number) => void
   activeView: 'terminal' | 'settings'
   setActiveView: (view: UISlice['activeView']) => void
-  activeModal: 'none' | 'create-worktree' | 'link-issue' | 'edit-comment' | 'delete-worktree'
+  activeModal: 'none' | 'create-worktree' | 'edit-meta' | 'delete-worktree'
   modalData: Record<string, unknown>
   openModal: (modal: UISlice['activeModal'], data?: Record<string, unknown>) => void
   closeModal: () => void
@@ -84,7 +84,6 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   dismissedUpdateVersion: null,
   dismissUpdate: () =>
     set((s) => ({
-      dismissedUpdateVersion:
-        'version' in s.updateStatus ? s.updateStatus.version ?? null : null
+      dismissedUpdateVersion: 'version' in s.updateStatus ? (s.updateStatus.version ?? null) : null
     }))
 })

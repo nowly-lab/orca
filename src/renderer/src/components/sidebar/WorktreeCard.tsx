@@ -75,6 +75,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
   isActive
 }: WorktreeCardProps) {
   const setActiveWorktree = useAppStore((s) => s.setActiveWorktree)
+  const openModal = useAppStore((s) => s.openModal)
   const updateWorktreeMeta = useAppStore((s) => s.updateWorktreeMeta)
   const fetchPRForBranch = useAppStore((s) => s.fetchPRForBranch)
   const fetchIssue = useAppStore((s) => s.fetchIssue)
@@ -150,6 +151,14 @@ const WorktreeCard = React.memo(function WorktreeCard({
     setActiveWorktree(worktree.id)
   }, [worktree.id, setActiveWorktree])
 
+  const handleDoubleClick = useCallback(() => {
+    openModal('edit-meta', {
+      worktreeId: worktree.id,
+      currentIssue: worktree.linkedIssue,
+      currentComment: worktree.comment
+    })
+  }, [worktree.id, worktree.linkedIssue, worktree.comment, openModal])
+
   const handleToggleUnreadQuick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault()
@@ -172,6 +181,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
           isDeleting && 'opacity-70'
         )}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         aria-busy={isDeleting}
       >
         {isDeleting && (
