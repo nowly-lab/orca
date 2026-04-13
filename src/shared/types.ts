@@ -62,6 +62,7 @@ export type WorkspaceVisibleTabType = 'terminal' | 'editor' | 'browser'
 
 export type Tab = {
   id: string // UUID for terminals, filePath for editors (preserves current convention)
+  entityId: string // ID of the backing content (terminal tab ID, file path, browser workspace ID)
   groupId: string
   worktreeId: string
   contentType: TabContentType
@@ -101,8 +102,9 @@ export type BrowserLoadError = {
   validatedUrl: string
 }
 
-export type BrowserTab = {
+export type BrowserPage = {
   id: string
+  workspaceId: string
   worktreeId: string
   url: string
   title: string
@@ -113,6 +115,64 @@ export type BrowserTab = {
   loadError: BrowserLoadError | null
   createdAt: number
 }
+
+export type BrowserWorkspace = {
+  id: string
+  worktreeId: string
+  /** Stable display label for the outer Orca tab ("Browser 1", "Browser 2", …).
+   *  Optional so sessions persisted before this field was added fall back
+   *  gracefully to the URL-derived label in getBrowserTabLabel. */
+  label?: string
+  // Why: each browser workspace binds to exactly one session profile at creation
+  // time. The profile determines which Electron partition (and thus which
+  // cookies/storage) the guest webview uses. Absent means the legacy shared
+  // partition, which keeps backward compat with workspaces persisted before
+  // session profiles existed.
+  sessionProfileId?: string | null
+  activePageId?: string | null
+  pageIds?: string[]
+  // Why: the active page owns real browser chrome state now, but the top-level
+  // Orca tab strip still renders one workspace entry. Mirror the active page's
+  // title/url/loading metadata here so existing workspace-level UI can stay
+  // stable while Phase 2 introduces nested browser pages.
+  url: string
+  title: string
+  loading: boolean
+  faviconUrl: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+  loadError: BrowserLoadError | null
+  createdAt: number
+}
+
+export type BrowserTab = BrowserWorkspace
+
+export type BrowserSessionProfileScope = 'default' | 'isolated' | 'imported'
+
+export type BrowserSessionProfileSource = {
+  browserFamily: 'chrome' | 'chromium' | 'arc' | 'edge' | 'manual'
+  profileName?: string
+  importedAt: number
+}
+
+export type BrowserSessionProfile = {
+  id: string
+  scope: BrowserSessionProfileScope
+  partition: string
+  label: string
+  source: BrowserSessionProfileSource | null
+}
+
+export type BrowserCookieImportSummary = {
+  totalCookies: number
+  importedCookies: number
+  skippedCookies: number
+  domains: string[]
+}
+
+export type BrowserCookieImportResult =
+  | { ok: true; profileId: string; summary: BrowserCookieImportSummary }
+  | { ok: false; reason: string }
 
 export type TerminalPaneSplitDirection = 'vertical' | 'horizontal'
 
@@ -168,9 +228,11 @@ export type WorkspaceSessionState = {
   openFilesByWorktree?: Record<string, PersistedOpenFile[]>
   /** Per-worktree active editor file ID (filePath) at shutdown. */
   activeFileIdByWorktree?: Record<string, string | null>
-  /** Persisted browser tabs, keyed by worktree ID. */
-  browserTabsByWorktree?: Record<string, BrowserTab[]>
-  /** Per-worktree active browser tab ID at shutdown. */
+  /** Persisted browser workspaces, keyed by worktree ID. */
+  browserTabsByWorktree?: Record<string, BrowserWorkspace[]>
+  /** Persisted browser pages, keyed by workspace ID. */
+  browserPagesByWorkspace?: Record<string, BrowserPage[]>
+  /** Per-worktree active browser workspace ID at shutdown. */
   activeBrowserTabIdByWorktree?: Record<string, string | null>
   /** Per-worktree active tab type (terminal vs editor vs browser) at shutdown. */
   activeTabTypeByWorktree?: Record<string, WorkspaceVisibleTabType>
@@ -478,6 +540,9 @@ export type PersistedUIState = {
   /** Once the user has seen the "your sessions won't be interrupted"
    *  reassurance card, we never show it again. */
   updateReassuranceSeen?: boolean
+  /** URL to navigate to when a new browser tab is opened. Null means blank tab.
+   *  Phase 3 will expand this to a full BrowserSessionProfile per workspace. */
+  browserDefaultUrl?: string | null
 }
 
 // ─── Persistence shape ──────────────────────────────────────────────

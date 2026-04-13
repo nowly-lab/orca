@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines */
 import { useEffect } from 'react'
 import { useAppStore } from '../store'
 import { applyUIZoom } from '@/lib/ui-zoom'
@@ -169,13 +170,30 @@ export function useIpcEvents(): void {
     )
 
     unsubs.push(
-      window.api.browser.onGuestLoadFailed(({ browserTabId, loadError }) => {
-        useAppStore.getState().updateBrowserTabPageState(browserTabId, {
+      window.api.browser.onGuestLoadFailed(({ browserPageId, loadError }) => {
+        useAppStore.getState().updateBrowserPageState(browserPageId, {
           loading: false,
           loadError,
           canGoBack: false,
           canGoForward: false
         })
+      })
+    )
+
+    unsubs.push(
+      window.api.browser.onOpenLinkInOrcaTab(({ browserPageId, url }) => {
+        const store = useAppStore.getState()
+        const sourcePage = Object.values(store.browserPagesByWorkspace)
+          .flat()
+          .find((page) => page.id === browserPageId)
+        if (!sourcePage) {
+          return
+        }
+        // Why: the guest process can request "open this link in Orca", but it
+        // does not own Orca's worktree/tab model. Resolve the source page's
+        // worktree and create a new outer browser tab so the link opens as a
+        // separate tab in the outer Orca tab bar.
+        store.createBrowserTab(sourcePage.worktreeId, url, { title: url })
       })
     )
 
@@ -186,7 +204,9 @@ export function useIpcEvents(): void {
         const store = useAppStore.getState()
         const worktreeId = store.activeWorktreeId
         if (worktreeId) {
-          store.createBrowserTab(worktreeId, 'about:blank', { title: 'New Browser Tab' })
+          store.createBrowserTab(worktreeId, store.browserDefaultUrl ?? 'about:blank', {
+            title: 'New Browser Tab'
+          })
         }
       })
     )
@@ -228,10 +248,6 @@ export function useIpcEvents(): void {
     unsubs.push(
       window.api.ui.onCloseActiveTab(() => {
         const store = useAppStore.getState()
-        // Why: this IPC fires only from browser guest webContents, so
-        // activeTabType is always 'browser'. We intentionally skip the
-        // editor case — closing dirty editor files requires the save
-        // confirmation dialog which lives in Terminal.tsx component state.
         if (store.activeTabType === 'browser' && store.activeBrowserTabId) {
           store.closeBrowserTab(store.activeBrowserTabId)
         }

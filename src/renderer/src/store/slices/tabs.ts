@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Why: tab slice co-locates group-scoped state,
+ * focus, and split-group lifecycle to keep state transitions atomic. */
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { Tab, TabGroup, TabContentType, WorkspaceSessionState } from '../../../../shared/types'
@@ -21,7 +23,9 @@ export type TabsSlice = {
   createUnifiedTab: (
     worktreeId: string,
     contentType: TabContentType,
-    init?: Partial<Pick<Tab, 'id' | 'label' | 'customLabel' | 'color' | 'isPreview' | 'isPinned'>>
+    init?: Partial<
+      Pick<Tab, 'id' | 'entityId' | 'label' | 'customLabel' | 'color' | 'isPreview' | 'isPinned'>
+    >
   ) => Tab
   closeUnifiedTab: (
     tabId: string
@@ -37,6 +41,13 @@ export type TabsSlice = {
   closeTabsToRight: (tabId: string) => string[]
   getActiveTab: (worktreeId: string) => Tab | null
   getTab: (tabId: string) => Tab | null
+  focusGroup: (worktreeId: string, groupId: string) => void
+  closeEmptyGroup: (worktreeId: string, groupId: string) => boolean
+  createEmptySplitGroup: (
+    worktreeId: string,
+    sourceGroupId: string,
+    direction: 'right' | 'down'
+  ) => string | null
   hydrateTabsSession: (session: WorkspaceSessionState) => void
 }
 
@@ -71,6 +82,7 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
 
       tab = {
         id,
+        entityId: init?.entityId ?? id,
         groupId: group.id,
         worktreeId,
         contentType,
@@ -338,6 +350,53 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
     const state = get()
     const found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
     return found?.tab ?? null
+  },
+
+  focusGroup: (worktreeId, groupId) => {
+    set((s) => ({
+      activeGroupIdByWorktree: { ...s.activeGroupIdByWorktree, [worktreeId]: groupId }
+    }))
+  },
+
+  closeEmptyGroup: (worktreeId, groupId) => {
+    const state = get()
+    const tabs = (state.unifiedTabsByWorktree[worktreeId] ?? []).filter(
+      (t) => t.groupId === groupId
+    )
+    if (tabs.length > 0) {
+      return false
+    }
+    const groups = state.groupsByWorktree[worktreeId] ?? []
+    const remaining = groups.filter((g) => g.id !== groupId)
+    if (remaining.length === 0) {
+      return false
+    }
+    set((s) => ({
+      groupsByWorktree: { ...s.groupsByWorktree, [worktreeId]: remaining },
+      activeGroupIdByWorktree: {
+        ...s.activeGroupIdByWorktree,
+        [worktreeId]: remaining[0].id
+      }
+    }))
+    return true
+  },
+
+  createEmptySplitGroup: (worktreeId, _sourceGroupId, _direction) => {
+    const newGroupId = globalThis.crypto.randomUUID()
+    const newGroup: TabGroup = {
+      id: newGroupId,
+      worktreeId,
+      activeTabId: null,
+      tabOrder: []
+    }
+    set((s) => {
+      const existing = s.groupsByWorktree[worktreeId] ?? []
+      return {
+        groupsByWorktree: { ...s.groupsByWorktree, [worktreeId]: [...existing, newGroup] },
+        activeGroupIdByWorktree: { ...s.activeGroupIdByWorktree, [worktreeId]: newGroupId }
+      }
+    })
+    return newGroupId
   },
 
   hydrateTabsSession: (session) => {

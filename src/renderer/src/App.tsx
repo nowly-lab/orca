@@ -94,6 +94,8 @@ function App(): React.JSX.Element {
   const hydrateWorkspaceSession = useAppStore((s) => s.hydrateWorkspaceSession)
   const hydrateEditorSession = useAppStore((s) => s.hydrateEditorSession)
   const hydrateBrowserSession = useAppStore((s) => s.hydrateBrowserSession)
+  const fetchBrowserSessionProfiles = useAppStore((s) => s.fetchBrowserSessionProfiles)
+  const fetchDetectedBrowsers = useAppStore((s) => s.fetchDetectedBrowsers)
   const reconnectPersistedTerminals = useAppStore((s) => s.reconnectPersistedTerminals)
   const hydratePersistedUI = useAppStore((s) => s.hydratePersistedUI)
   const openModal = useAppStore((s) => s.openModal)
@@ -112,7 +114,11 @@ function App(): React.JSX.Element {
   const activeTabTypeByWorktree = useAppStore((s) => s.activeTabTypeByWorktree)
   const activeTabIdByWorktree = useAppStore((s) => s.activeTabIdByWorktree)
   const browserTabsByWorktree = useAppStore((s) => s.browserTabsByWorktree)
+  const browserPagesByWorkspace = useAppStore((s) => s.browserPagesByWorkspace)
   const activeBrowserTabIdByWorktree = useAppStore((s) => s.activeBrowserTabIdByWorktree)
+  const unifiedTabsByWorktree = useAppStore((s) => s.unifiedTabsByWorktree)
+  const groupsByWorktree = useAppStore((s) => s.groupsByWorktree)
+  const activeGroupIdByWorktree = useAppStore((s) => s.activeGroupIdByWorktree)
 
   // Right sidebar + editor state
   const toggleRightSidebar = useAppStore((s) => s.toggleRightSidebar)
@@ -154,6 +160,8 @@ function App(): React.JSX.Element {
           hydrateWorkspaceSession(session)
           hydrateEditorSession(session)
           hydrateBrowserSession(session)
+          await fetchBrowserSessionProfiles()
+          await fetchDetectedBrowsers()
           await reconnectPersistedTerminals(abortController.signal)
           syncZoomCSSVar()
         }
@@ -207,6 +215,8 @@ function App(): React.JSX.Element {
     hydrateWorkspaceSession,
     hydrateEditorSession,
     hydrateBrowserSession,
+    fetchBrowserSessionProfiles,
+    fetchDetectedBrowsers,
     reconnectPersistedTerminals
   ])
 
@@ -243,7 +253,11 @@ function App(): React.JSX.Element {
           activeFileIdByWorktree,
           activeTabTypeByWorktree,
           browserTabsByWorktree,
-          activeBrowserTabIdByWorktree
+          browserPagesByWorkspace,
+          activeBrowserTabIdByWorktree,
+          unifiedTabsByWorktree,
+          groupsByWorktree,
+          activeGroupIdByWorktree
         })
       )
     }, 150)
@@ -261,7 +275,11 @@ function App(): React.JSX.Element {
     activeTabTypeByWorktree,
     activeTabIdByWorktree,
     browserTabsByWorktree,
-    activeBrowserTabIdByWorktree
+    browserPagesByWorkspace,
+    activeBrowserTabIdByWorktree,
+    unifiedTabsByWorktree,
+    groupsByWorktree,
+    activeGroupIdByWorktree
   ])
 
   // On shutdown, capture terminal scrollback buffers and flush to disk.

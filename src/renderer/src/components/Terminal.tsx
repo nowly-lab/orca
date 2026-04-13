@@ -59,8 +59,6 @@ export default function Terminal(): React.JSX.Element | null {
   const createBrowserTab = useAppStore((s) => s.createBrowserTab)
   const closeBrowserTab = useAppStore((s) => s.closeBrowserTab)
   const setActiveBrowserTab = useAppStore((s) => s.setActiveBrowserTab)
-  const updateBrowserTabPageState = useAppStore((s) => s.updateBrowserTabPageState)
-  const setBrowserTabUrl = useAppStore((s) => s.setBrowserTabUrl)
 
   const markFileDirty = useAppStore((s) => s.markFileDirty)
   const setTabBarOrder = useAppStore((s) => s.setTabBarOrder)
@@ -243,7 +241,8 @@ export default function Terminal(): React.JSX.Element | null {
     if (!activeWorktreeId) {
       return
     }
-    createBrowserTab(activeWorktreeId, 'about:blank', { title: 'New Browser Tab' })
+    const defaultUrl = useAppStore.getState().browserDefaultUrl ?? 'about:blank'
+    createBrowserTab(activeWorktreeId, defaultUrl, { title: 'New Browser Tab' })
   }, [activeWorktreeId, createBrowserTab])
 
   const handleCloseTab = useCallback(
@@ -457,20 +456,6 @@ export default function Terminal(): React.JSX.Element | null {
     [setActiveBrowserTab, setActiveTabType]
   )
 
-  const handleBrowserTabPageStateUpdate = useCallback(
-    (tabId: string, updates: Parameters<typeof updateBrowserTabPageState>[1]) => {
-      updateBrowserTabPageState(tabId, updates)
-    },
-    [updateBrowserTabPageState]
-  )
-
-  const handleBrowserTabSetUrl = useCallback(
-    (tabId: string, url: string) => {
-      setBrowserTabUrl(tabId, url)
-    },
-    [setBrowserTabUrl]
-  )
-
   // Keyboard shortcuts
   useEffect(() => {
     if (!activeWorktreeId) {
@@ -480,10 +465,18 @@ export default function Terminal(): React.JSX.Element | null {
     const isMac = navigator.userAgent.includes('Mac')
     const onKeyDown = (e: KeyboardEvent): void => {
       const mod = isMac ? e.metaKey : e.ctrlKey
-      // Cmd/Ctrl+T - new terminal tab
+      // Why: when the browser workspace is the active surface, standard
+      // browser tab creation should stay inside that workspace. Reusing the
+      // same shortcut keeps Orca's embedded browser aligned with user
+      // expectations instead of unexpectedly mutating the outer tab strip.
       if (mod && e.key === 't' && !e.shiftKey && !e.repeat) {
         e.preventDefault()
-        handleNewTab()
+        const state = useAppStore.getState()
+        if (state.activeTabType === 'browser') {
+          handleNewBrowserTab()
+        } else {
+          handleNewTab()
+        }
         return
       }
 
@@ -505,7 +498,7 @@ export default function Terminal(): React.JSX.Element | null {
         if (state.activeTabType === 'editor' && state.activeFileId) {
           handleCloseFile(state.activeFileId)
         } else if (state.activeTabType === 'browser' && state.activeBrowserTabId) {
-          handleCloseBrowserTab(state.activeBrowserTabId)
+          closeBrowserTab(state.activeBrowserTabId)
         }
         return
       }
@@ -582,6 +575,7 @@ export default function Terminal(): React.JSX.Element | null {
     handleNewTab,
     handleCloseTab,
     handleCloseBrowserTab,
+    closeBrowserTab,
     handleCloseFile,
     setActiveTab
   ])
@@ -829,10 +823,9 @@ export default function Terminal(): React.JSX.Element | null {
           })}
       </div>
 
-      {/* Browser panes container — hidden when active tab is not a browser tab.
-          Only the active browser tab for the active worktree is mounted; others
-          are parked in a hidden off-screen container by BrowserPane to preserve
-          their webview guest process across tab switches. */}
+      {/* Browser panes container — all browser panes for the active worktree
+          stay mounted so webview DOM state (scroll position, form inputs, etc.)
+          survives tab switches. BrowserPagePane uses isActive + CSS to show/hide. */}
       <div
         className={`relative flex-1 min-h-0 overflow-hidden ${activeTabType !== 'browser' ? 'hidden' : ''}`}
       >
@@ -848,18 +841,20 @@ export default function Terminal(): React.JSX.Element | null {
               className={isVisibleWorktree ? 'absolute inset-0' : 'absolute inset-0 hidden'}
               aria-hidden={!isVisibleWorktree}
             >
-              {isVisibleWorktree && activeTabType === 'browser'
-                ? browserTabs
-                    .filter((browserTab) => browserTab.id === activeBrowserTabId)
-                    .map((browserTab) => (
-                      <BrowserPane
-                        key={browserTab.id}
-                        browserTab={browserTab}
-                        onUpdatePageState={handleBrowserTabPageStateUpdate}
-                        onSetUrl={handleBrowserTabSetUrl}
-                      />
-                    ))
-                : null}
+              {browserTabs.map((browserTab) => {
+                const isBrowserActive =
+                  isVisibleWorktree &&
+                  activeTabType === 'browser' &&
+                  browserTab.id === activeBrowserTabId
+                return (
+                  <div
+                    key={browserTab.id}
+                    className={`absolute inset-0${isBrowserActive ? '' : ' pointer-events-none hidden'}`}
+                  >
+                    <BrowserPane browserTab={browserTab} isActive={isBrowserActive} />
+                  </div>
+                )
+              })}
             </div>
           )
         })}

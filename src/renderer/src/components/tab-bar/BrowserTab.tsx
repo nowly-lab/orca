@@ -15,7 +15,7 @@ import { getLiveBrowserUrl } from '../browser-pane/browser-runtime'
 
 function formatBrowserTabUrlLabel(url: string): string {
   if (url === ORCA_BROWSER_BLANK_URL || url === 'about:blank') {
-    return 'New Browser Tab'
+    return 'New Tab'
   }
   try {
     const parsed = new URL(url)
@@ -34,7 +34,6 @@ function getBrowserTabLabel(tab: BrowserTabState): string {
   ) {
     return formatBrowserTabUrlLabel(tab.url)
   }
-
   return tab.title || tab.url
 }
 

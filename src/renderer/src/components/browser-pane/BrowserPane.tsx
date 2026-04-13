@@ -10,9 +10,11 @@ import {
   ExternalLink,
   Globe,
   Image,
+  Import,
   Loader2,
   OctagonX,
   RefreshCw,
+  Settings,
   SquareCode
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,8 +28,20 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { useAppStore } from '@/store'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { ORCA_BROWSER_BLANK_URL, ORCA_BROWSER_PARTITION } from '../../../../shared/constants'
-import type { BrowserLoadError, BrowserTab as BrowserTabState } from '../../../../shared/types'
+import type {
+  BrowserLoadError,
+  BrowserPage as BrowserPageState,
+  BrowserWorkspace as BrowserWorkspaceState
+} from '../../../../shared/types'
 import {
   normalizeBrowserNavigationUrl,
   normalizeExternalBrowserUrl
@@ -39,19 +53,37 @@ import {
   rememberLiveBrowserUrl
 } from './browser-runtime'
 import type {
+  BrowserDownloadRequestedEvent,
+  BrowserDownloadProgressEvent,
+  BrowserDownloadFinishedEvent
+} from '../../../../shared/browser-guest-events'
+import type {
   BrowserGrabPayload,
   BrowserGrabScreenshot
 } from '../../../../shared/browser-grab-types'
 import { useGrabMode } from './useGrabMode'
 import { formatGrabPayloadAsText } from './GrabConfirmationSheet'
 import { isEditableKeyboardTarget } from './browser-keyboard'
+import {
+  formatByteCount,
+  formatDownloadFinishedNotice,
+  formatLoadFailureDescription,
+  formatLoadFailureRecoveryHint,
+  formatPermissionNotice,
+  formatPopupNotice
+} from './browser-notices'
 
 type BrowserTabPageState = Partial<
   Pick<
-    BrowserTabState,
+    BrowserPageState,
     'title' | 'loading' | 'faviconUrl' | 'canGoBack' | 'canGoForward' | 'loadError'
   >
 >
+
+type BrowserDownloadState = BrowserDownloadRequestedEvent & {
+  receivedBytes: number
+  status: 'requested' | 'downloading'
+}
 
 const webviewRegistry = new Map<string, Electron.WebviewTag>()
 const registeredWebContentsIds = new Map<string, number>()
@@ -59,7 +91,7 @@ const parkedAtByTabId = new Map<string, number>()
 let hiddenContainer: HTMLDivElement | null = null
 const DRAG_LISTENER_KEY = '__orcaBrowserPaneDragListeners'
 const MAX_PARKED_WEBVIEWS = 6
-
+const EMPTY_BROWSER_PAGES: BrowserPageState[] = []
 function getHiddenContainer(): HTMLDivElement {
   if (!hiddenContainer) {
     hiddenContainer = document.createElement('div')
@@ -116,7 +148,7 @@ export function destroyPersistentWebview(browserTabId: string): void {
     clearLiveBrowserUrl(browserTabId)
     return
   }
-  void window.api.browser.unregisterGuest({ browserTabId })
+  void window.api.browser.unregisterGuest({ browserPageId: browserTabId })
   webview.remove()
   webviewRegistry.delete(browserTabId)
   registeredWebContentsIds.delete(browserTabId)
@@ -138,6 +170,19 @@ function buildLoadError(event: {
 
 function toDisplayUrl(url: string): string {
   return url === ORCA_BROWSER_BLANK_URL ? 'about:blank' : url
+}
+
+function getBrowserDisplayTitle(title: string | null | undefined, url: string): string {
+  if (
+    url === 'about:blank' ||
+    url === ORCA_BROWSER_BLANK_URL ||
+    title === 'about:blank' ||
+    title === ORCA_BROWSER_BLANK_URL ||
+    !title
+  ) {
+    return 'New Tab'
+  }
+  return title
 }
 
 function isChromiumErrorPage(url: string): boolean {
@@ -166,16 +211,6 @@ function getLoadErrorMetadata(loadError: BrowserLoadError | null): {
   }
 }
 
-function getFriendlyLoadErrorDescription(loadError: BrowserLoadError | null): string {
-  if (!loadError) {
-    return 'The page did not respond.'
-  }
-  if (loadError.code === 0) {
-    return loadError.description
-  }
-  return "We couldn't connect to this page."
-}
-
 function getOpenableExternalUrl(
   webview: Electron.WebviewTag | null,
   fallbackUrl: string
@@ -195,9 +230,24 @@ function getOpenableExternalUrl(
   return normalizeExternalBrowserUrl(currentUrl)
 }
 
+function getCurrentBrowserUrl(webview: Electron.WebviewTag | null, fallbackUrl: string): string {
+  let currentUrl = fallbackUrl
+  if (webview) {
+    try {
+      currentUrl = webview.getURL() || fallbackUrl
+    } catch {
+      // Why: toolbar actions still need a stable URL during early guest attach
+      // and restore. Fall back to the persisted tab URL instead of throwing
+      // and dropping browser actions on freshly restored tabs.
+      currentUrl = fallbackUrl
+    }
+  }
+  return toDisplayUrl(currentUrl)
+}
+
 function retryBrowserTabLoad(
   webview: Electron.WebviewTag | null,
-  browserTab: BrowserTabState,
+  browserTab: BrowserPageState,
   onUpdatePageState: (tabId: string, updates: BrowserTabPageState) => void
 ): void {
   if (!webview) {
@@ -254,10 +304,50 @@ function evictParkedWebviews(excludedTabId: string | null = null): void {
 
 export default function BrowserPane({
   browserTab,
+  isActive
+}: {
+  browserTab: BrowserWorkspaceState
+  isActive: boolean
+}): React.JSX.Element {
+  const browserPagesByWorkspace = useAppStore((s) => s.browserPagesByWorkspace)
+  const browserPages = browserPagesByWorkspace[browserTab.id] ?? EMPTY_BROWSER_PAGES
+  const activeBrowserPage = browserPages[0] ?? null
+  const updateBrowserPageState = useAppStore((s) => s.updateBrowserPageState)
+  const setBrowserPageUrl = useAppStore((s) => s.setBrowserPageUrl)
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
+      {activeBrowserPage ? (
+        <div className="relative flex min-h-0 flex-1">
+          <BrowserPagePane
+            browserTab={activeBrowserPage}
+            workspaceId={browserTab.id}
+            worktreeId={browserTab.worktreeId}
+            sessionProfileId={browserTab.sessionProfileId ?? null}
+            isActive={isActive}
+            onUpdatePageState={updateBrowserPageState}
+            onSetUrl={setBrowserPageUrl}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function BrowserPagePane({
+  browserTab,
+  workspaceId,
+  worktreeId,
+  sessionProfileId,
+  isActive,
   onUpdatePageState,
   onSetUrl
 }: {
-  browserTab: BrowserTabState
+  browserTab: BrowserPageState
+  workspaceId: string
+  worktreeId: string
+  sessionProfileId: string | null
+  isActive: boolean
   onUpdatePageState: (tabId: string, updates: BrowserTabPageState) => void
   onSetUrl: (tabId: string, url: string) => void
 }): React.JSX.Element {
@@ -271,14 +361,89 @@ export default function BrowserPane({
   const browserTabUrlRef = useRef(browserTab.url)
   const activeLoadFailureRef = useRef<BrowserLoadError | null>(browserTab.loadError)
   const trackNextLoadingEventRef = useRef(false)
+  // Why: tracks the most recent URL the webview has navigated to or been
+  // observed at, from any source (navigation events, address bar, initial
+  // load). The URL sync effect checks this ref to avoid force-navigating
+  // the webview to an intermediate redirect URL — which would restart the
+  // redirect chain and cause an infinite loop.
+  const lastKnownWebviewUrlRef = useRef<string | null>(null)
   const onUpdatePageStateRef = useRef(onUpdatePageState)
   const onSetUrlRef = useRef(onSetUrl)
   const [addressBarValue, setAddressBarValue] = useState(browserTab.url)
   const addressBarValueRef = useRef(browserTab.url)
   const [resourceNotice, setResourceNotice] = useState<string | null>(null)
+  const [downloadState, setDownloadState] = useState<BrowserDownloadState | null>(null)
+  const downloadStateRef = useRef<BrowserDownloadState | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    linkUrl: string | null
+    pageUrl: string
+  } | null>(null)
   const grab = useGrabMode(browserTab.id)
+  const createBrowserTab = useAppStore((s) => s.createBrowserTab)
   const consumeAddressBarFocusRequest = useAppStore((s) => s.consumeAddressBarFocusRequest)
+  const browserDefaultUrl = useAppStore((s) => s.browserDefaultUrl)
+  const setBrowserDefaultUrl = useAppStore((s) => s.setBrowserDefaultUrl)
+  const browserSessionProfiles = useAppStore((s) => s.browserSessionProfiles)
+  const sessionProfile = sessionProfileId
+    ? (browserSessionProfiles.find((p) => p.id === sessionProfileId) ?? null)
+    : null
+  const webviewPartition = sessionProfile?.partition ?? ORCA_BROWSER_PARTITION
+  const detectedBrowsers = useAppStore((s) => s.detectedBrowsers)
+  const browserSessionImportState = useAppStore((s) => s.browserSessionImportState)
+  const clearBrowserSessionImportState = useAppStore((s) => s.clearBrowserSessionImportState)
+
+  useEffect(() => {
+    if (!browserSessionImportState) {
+      return
+    }
+    if (browserSessionImportState.status === 'success' && browserSessionImportState.summary) {
+      const { importedCookies, domains } = browserSessionImportState.summary
+      const domainPreview = domains.slice(0, 3).join(', ')
+      const more = domains.length > 3 ? ` +${domains.length - 3} more` : ''
+      setResourceNotice(
+        `Imported ${importedCookies} cookies for ${domainPreview}${more}. Reload the page to use them.`
+      )
+      clearBrowserSessionImportState()
+    } else if (browserSessionImportState.status === 'error' && browserSessionImportState.error) {
+      setResourceNotice(`Cookie import failed: ${browserSessionImportState.error}`)
+      clearBrowserSessionImportState()
+    }
+  }, [browserSessionImportState, clearBrowserSessionImportState])
+
+  useEffect(() => {
+    if (!resourceNotice) {
+      return
+    }
+    const timer = setTimeout(() => setResourceNotice(null), 10_000)
+    return () => clearTimeout(timer)
+  }, [resourceNotice])
+
   const keepAddressBarFocusRef = useRef(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [homePageDraft, setHomePageDraft] = useState('')
+
+  const saveHomePage = useCallback(() => {
+    const trimmed = homePageDraft.trim()
+    if (!trimmed) {
+      // Why: empty input treated as "clear" so the user can remove a home page
+      // without having to click the separate Clear button.
+      setBrowserDefaultUrl(null)
+    } else {
+      const normalized = normalizeBrowserNavigationUrl(trimmed)
+      if (normalized && normalized !== ORCA_BROWSER_BLANK_URL) {
+        setBrowserDefaultUrl(normalized)
+      }
+      // Why: if the URL is not navigable (e.g. plain text with no scheme),
+      // leave the draft as-is so the user can correct it rather than silently
+      // discarding their input.
+      if (!normalized || normalized === ORCA_BROWSER_BLANK_URL) {
+        return
+      }
+    }
+    setSettingsOpen(false)
+  }, [homePageDraft, setBrowserDefaultUrl])
 
   // Inline toast that appears near the grabbed element instead of the global
   // bottom-right toaster, so feedback feels spatially connected to the action.
@@ -299,6 +464,15 @@ export default function BrowserPane({
   useEffect(() => {
     return () => clearTimeout(grabToastTimerRef.current)
   }, [])
+
+  // Why: populate the home-page draft from the stored value each time the
+  // settings dialog opens so the user sees the current setting pre-filled
+  // rather than an empty field or a stale in-memory edit.
+  useEffect(() => {
+    if (settingsOpen) {
+      setHomePageDraft(browserDefaultUrl ?? '')
+    }
+  }, [settingsOpen, browserDefaultUrl])
   const grabRef = useRef(grab)
   grabRef.current = grab
 
@@ -357,6 +531,10 @@ export default function BrowserPane({
   }, [grab.state, grab.payload, grab.contextMenu, showGrabToast])
 
   useEffect(() => {
+    initialBrowserUrlRef.current = browserTab.url
+  }, [browserTab.id, browserTab.url])
+
+  useEffect(() => {
     setAddressBarValue(toDisplayUrl(browserTab.url))
   }, [browserTab.url])
 
@@ -373,12 +551,107 @@ export default function BrowserPane({
   }, [addressBarValue])
 
   useEffect(() => {
+    downloadStateRef.current = downloadState
+  }, [downloadState])
+
+  useEffect(() => {
     setResourceNotice(
       consumeEvictedBrowserTab(browserTab.id)
         ? 'This tab reloaded to free browser resources.'
         : null
     )
+    setDownloadState(null)
   }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onPermissionDenied((event) => {
+      if (event.browserPageId !== browserTab.id) {
+        return
+      }
+      setResourceNotice(formatPermissionNotice(event))
+    })
+  }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onPopup((event) => {
+      if (event.browserPageId !== browserTab.id) {
+        return
+      }
+      setResourceNotice(formatPopupNotice(event))
+    })
+  }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onContextMenuRequested((event) => {
+      if (event.browserPageId !== browserTab.id) {
+        return
+      }
+      setContextMenu({
+        x: event.x,
+        y: event.y,
+        linkUrl: event.linkUrl,
+        pageUrl: event.pageUrl
+      })
+    })
+  }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onContextMenuDismissed((event) => {
+      if (event.browserPageId !== browserTab.id) {
+        return
+      }
+      setContextMenu(null)
+    })
+  }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onDownloadRequested((event) => {
+      if (event.browserPageId !== browserTab.id) {
+        return
+      }
+      // Why: downloads are approved per browser tab, not globally. Keep the
+      // request local to the owning BrowserPane so the user can see which page
+      // triggered the save prompt before Orca asks main to choose a path.
+      setDownloadState({
+        ...event,
+        receivedBytes: 0,
+        status: 'requested'
+      })
+      setResourceNotice(null)
+    })
+  }, [browserTab.id])
+
+  useEffect(() => {
+    return window.api.browser.onDownloadProgress((event: BrowserDownloadProgressEvent) => {
+      setDownloadState((current) => {
+        if (!current || current.downloadId !== event.downloadId) {
+          return current
+        }
+        return {
+          ...current,
+          receivedBytes: event.receivedBytes,
+          totalBytes: event.totalBytes,
+          status: 'downloading'
+        }
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.api.browser.onDownloadFinished((event: BrowserDownloadFinishedEvent) => {
+      const current = downloadStateRef.current
+      if (!current || current.downloadId !== event.downloadId) {
+        return
+      }
+      setDownloadState((current) => {
+        if (!current || current.downloadId !== event.downloadId) {
+          return current
+        }
+        return null
+      })
+      setResourceNotice(formatDownloadFinishedNotice(event))
+    })
+  }, [])
 
   const focusAddressBarNow = useCallback(() => {
     const input = addressBarInputRef.current
@@ -435,6 +708,66 @@ export default function BrowserPane({
   }, [browserTab.id, consumeAddressBarFocusRequest, focusAddressBarNow])
 
   useEffect(() => {
+    if (!isActive) {
+      return
+    }
+    return window.api.ui.onFocusBrowserAddressBar(() => {
+      focusAddressBarNow()
+    })
+  }, [focusAddressBarNow, isActive])
+
+  // Cmd/Ctrl+R — reload (renderer path: focus on browser chrome, not in guest)
+  // Why: when focus is inside the renderer chrome (address bar, toolbar buttons)
+  // rather than the webview guest, the guest shortcut forwarding in main never
+  // fires. Handle the chord directly here so reload works regardless of where
+  // focus sits within the browser pane.
+  useEffect(() => {
+    if (!isActive) {
+      return
+    }
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const isMod = navigator.userAgent.includes('Mac') ? e.metaKey : e.ctrlKey
+      if (!isMod || e.altKey || e.key.toLowerCase() !== 'r') {
+        return
+      }
+      if (isEditableKeyboardTarget(e.target)) {
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.shiftKey) {
+        webviewRef.current?.reloadIgnoringCache()
+      } else {
+        webviewRef.current?.reload()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isActive])
+
+  // Cmd/Ctrl+R — reload (IPC path: focus inside webview guest)
+  // Why: a focused webview guest is a separate Chromium process so the renderer
+  // keydown handler above never fires. Main intercepts the chord and sends it
+  // back here so reload works whether focus is on the toolbar or the page.
+  useEffect(() => {
+    if (!isActive) {
+      return
+    }
+    return window.api.ui.onReloadBrowserPage(() => {
+      webviewRef.current?.reload()
+    })
+  }, [isActive])
+
+  useEffect(() => {
+    if (!isActive) {
+      return
+    }
+    return window.api.ui.onHardReloadBrowserPage(() => {
+      webviewRef.current?.reloadIgnoringCache()
+    })
+  }, [isActive])
+
+  useEffect(() => {
     onUpdatePageStateRef.current = onUpdatePageState
     onSetUrlRef.current = onSetUrl
   }, [onSetUrl, onUpdatePageState])
@@ -443,7 +776,10 @@ export default function BrowserPane({
     (webview: Electron.WebviewTag): void => {
       try {
         onUpdatePageStateRef.current(browserTab.id, {
-          title: webview.getTitle() || webview.getURL() || 'Browser',
+          title: getBrowserDisplayTitle(
+            webview.getTitle(),
+            webview.getURL() || browserTabUrlRef.current
+          ),
           // Why: webview reclaim/attach can transiently report isLoading() even
           // when no user-visible navigation happened. If we sync that into the
           // tab model on every activation, switching tabs flashes the blue
@@ -461,6 +797,12 @@ export default function BrowserPane({
     [browserTab.id]
   )
 
+  // Why: this effect manages the full lifecycle of the webview DOM element —
+  // creation, parking, event wiring, and teardown. browserTab.url is
+  // intentionally excluded — it changes on every navigation, and including it
+  // would destroy and recreate the webview on every page load. URL-dependent
+  // logic inside the effect reads from browserTabUrlRef instead.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
   useEffect(() => {
     const container = containerRef.current
     if (!container) {
@@ -473,9 +815,15 @@ export default function BrowserPane({
       container.appendChild(webview)
       parkedAtByTabId.delete(browserTab.id)
       syncNavigationState(webview)
+      // Why: seed the ref with the store URL so the URL sync effect does not
+      // force-navigate a reclaimed webview that is already on the right page.
+      // getURL() can throw briefly during reattach, so use the store URL which
+      // was set by the last navigation event before parking.
+      lastKnownWebviewUrlRef.current =
+        normalizeBrowserNavigationUrl(browserTabUrlRef.current) ?? null
     } else {
       webview = document.createElement('webview') as Electron.WebviewTag
-      webview.setAttribute('partition', ORCA_BROWSER_PARTITION)
+      webview.setAttribute('partition', webviewPartition)
       webview.setAttribute('allowpopups', '')
       webview.style.display = 'flex'
       webview.style.flex = '1'
@@ -495,7 +843,8 @@ export default function BrowserPane({
       if (registeredWebContentsIds.get(browserTab.id) !== webContentsId) {
         registeredWebContentsIds.set(browserTab.id, webContentsId)
         void window.api.browser.registerGuest({
-          browserTabId: browserTab.id,
+          browserPageId: browserTab.id,
+          workspaceId,
           webContentsId
         })
       }
@@ -546,7 +895,7 @@ export default function BrowserPane({
           // already knows this exact load failed.
           onUpdatePageStateRef.current(browserTab.id, {
             loading: false,
-            title: webview.getTitle() || currentUrl,
+            title: getBrowserDisplayTitle(webview.getTitle(), currentUrl),
             faviconUrl: faviconUrlRef.current,
             canGoBack: webview.canGoBack(),
             canGoForward: webview.canGoForward(),
@@ -557,6 +906,7 @@ export default function BrowserPane({
       }
       trackNextLoadingEventRef.current = false
       activeLoadFailureRef.current = null
+      lastKnownWebviewUrlRef.current = normalizeBrowserNavigationUrl(currentUrl) ?? currentUrl
       rememberLiveBrowserUrl(browserTab.id, currentUrl)
       setAddressBarValue(toDisplayUrl(currentUrl))
       onSetUrlRef.current(browserTab.id, currentUrl)
@@ -567,7 +917,7 @@ export default function BrowserPane({
       }
       onUpdatePageStateRef.current(browserTab.id, {
         loading: false,
-        title: webview.getTitle() || currentUrl,
+        title: getBrowserDisplayTitle(webview.getTitle(), currentUrl),
         faviconUrl: faviconUrlRef.current,
         canGoBack: webview.canGoBack(),
         canGoForward: webview.canGoForward(),
@@ -583,6 +933,7 @@ export default function BrowserPane({
       if (isChromiumErrorPage(currentUrl)) {
         return
       }
+      lastKnownWebviewUrlRef.current = normalizeBrowserNavigationUrl(currentUrl) ?? currentUrl
       rememberLiveBrowserUrl(browserTab.id, currentUrl)
       setAddressBarValue(toDisplayUrl(currentUrl))
       onSetUrlRef.current(browserTab.id, currentUrl)
@@ -594,9 +945,13 @@ export default function BrowserPane({
     }
 
     const handleTitleUpdate = (event: { title?: string }): void => {
-      onUpdatePageStateRef.current(browserTab.id, {
-        title: event.title ?? webview.getURL() ?? 'Browser'
-      })
+      try {
+        onUpdatePageStateRef.current(browserTab.id, {
+          title: getBrowserDisplayTitle(event.title, webview.getURL() || browserTab.url)
+        })
+      } catch {
+        // Why: title-updated can fire before dom-ready, making getURL() throw.
+      }
     }
 
     const handleFaviconUpdate = (event: { favicons?: string[] }): void => {
@@ -651,11 +1006,11 @@ export default function BrowserPane({
       // Only non-blank initial tabs should light up Orca's loading indicator;
       // reclaiming/activating a parked about:blank tab is not a meaningful
       // navigation and should not flash the tab-loading dot.
-      trackNextLoadingEventRef.current =
-        (normalizeBrowserNavigationUrl(initialBrowserUrlRef.current) ?? ORCA_BROWSER_BLANK_URL) !==
-        ORCA_BROWSER_BLANK_URL
-      webview.src =
+      const initialUrl =
         normalizeBrowserNavigationUrl(initialBrowserUrlRef.current) ?? ORCA_BROWSER_BLANK_URL
+      trackNextLoadingEventRef.current = initialUrl !== ORCA_BROWSER_BLANK_URL
+      lastKnownWebviewUrlRef.current = initialUrl
+      webview.src = initialUrl
     }
 
     return () => {
@@ -678,7 +1033,20 @@ export default function BrowserPane({
         evictParkedWebviews(browserTab.id)
       }
     }
-  }, [browserTab.id, focusAddressBarNow, focusWebviewNow, syncNavigationState])
+    // Why: this effect mounts and wires up webview event listeners once per tab
+    // identity. browserTab.url and webviewPartition are intentionally excluded:
+    // re-running on URL changes would detach/reattach the webview, cancelling
+    // in-progress navigations. Callbacks use refs so they always see current values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    browserTab.id,
+    workspaceId,
+    worktreeId,
+    createBrowserTab,
+    focusAddressBarNow,
+    focusWebviewNow,
+    syncNavigationState
+  ])
 
   useEffect(() => {
     const webview = webviewRef.current
@@ -689,11 +1057,36 @@ export default function BrowserPane({
     if (!normalizedUrl) {
       return
     }
-    if (webview.src !== normalizedUrl && webview.getAttribute('src') !== normalizedUrl) {
+    // Why: navigation events (did-navigate, did-stop-loading) update both the
+    // store URL and this ref to the same value. If they match, the store URL
+    // change came from a navigation event — not a user action — so there is
+    // nothing to navigate to. Skipping here prevents the sync effect from
+    // force-navigating the webview back to an intermediate redirect URL, which
+    // would restart the redirect chain and cause an infinite loop.
+    if (lastKnownWebviewUrlRef.current === normalizedUrl) {
+      return
+    }
+    let liveUrl: string | null = null
+    try {
+      liveUrl = webview.getURL() || null
+    } catch {
+      // Why: reattached parked guests can briefly reject getURL() before the
+      // underlying guest is fully ready again. Skip entirely so we do not
+      // misinterpret a transient error as a URL mismatch and force-navigate.
+      return
+    }
+    const normalizedLiveUrl = liveUrl ? (normalizeBrowserNavigationUrl(liveUrl) ?? liveUrl) : null
+    const declaredSrc = webview.getAttribute('src')
+    if (
+      normalizedLiveUrl !== normalizedUrl &&
+      webview.src !== normalizedUrl &&
+      declaredSrc !== normalizedUrl
+    ) {
       // Why: browserTab.url changes are Orca-driven navigations (address bar,
       // terminal link open, retry target update). Gate the next did-start-loading
       // event so only real navigations, not tab activation churn, show loading UI.
       trackNextLoadingEventRef.current = normalizedUrl !== ORCA_BROWSER_BLANK_URL
+      lastKnownWebviewUrlRef.current = normalizedUrl
       webview.src = normalizedUrl
       if (normalizedUrl !== ORCA_BROWSER_BLANK_URL) {
         keepAddressBarFocusRef.current = false
@@ -752,6 +1145,12 @@ export default function BrowserPane({
   // handled by the guest page itself (Chromium's built-in Cmd+C) and never
   // reaches the host renderer keydown listener.
   useEffect(() => {
+    // Why: without the isActive gate, every mounted BrowserPagePane registers
+    // a global keydown listener, so Cmd+C would toggle grab mode on all panes
+    // simultaneously — not just the active one.
+    if (!isActive) {
+      return
+    }
     const handleKeyDown = (e: KeyboardEvent): void => {
       // Why: let native Cmd+C work in text inputs (address bar, search fields,
       // contentEditable regions). Only intercept when focus is on a non-input
@@ -767,7 +1166,27 @@ export default function BrowserPane({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [grab])
+  }, [grab, isActive])
+
+  useEffect(() => {
+    if (!isActive) {
+      return
+    }
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const isMod = navigator.userAgent.includes('Mac') ? e.metaKey : e.ctrlKey
+      if (!isMod || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'l') {
+        return
+      }
+      // Why: Cmd/Ctrl+L is a browser-local focus command. Capture it before
+      // the surrounding workspace or any embedded editor surface can treat the
+      // same chord as something else.
+      e.preventDefault()
+      e.stopPropagation()
+      focusAddressBarNow()
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [focusAddressBarNow, isActive])
 
   // Why: a focused webview guest receives Cmd/Ctrl+C inside Chromium, not the
   // host renderer window. Main forwards the chord back only when the page
@@ -827,7 +1246,7 @@ export default function BrowserPane({
         // armed/awaiting — extract hovered element via IPC without clicking
         void (async () => {
           const result = await window.api.browser.extractHoverPayload({
-            browserTabId: browserTabIdRef.current
+            browserPageId: browserTabIdRef.current
           })
           if (!result.ok) {
             showGrabToast('No element hovered', 'error')
@@ -838,7 +1257,7 @@ export default function BrowserPane({
           if (key === 's') {
             try {
               const ssResult = await window.api.browser.captureSelectionScreenshot({
-                browserTabId: browserTabIdRef.current,
+                browserPageId: browserTabIdRef.current,
                 rect: payload.target.rectViewport
               })
               if (ssResult.ok) {
@@ -884,8 +1303,8 @@ export default function BrowserPane({
     if (grab.state === 'idle' || grab.state === 'error') {
       return
     }
-    return window.api.browser.onGrabActionShortcut(({ browserTabId, key }) => {
-      if (browserTabId !== browserTab.id) {
+    return window.api.browser.onGrabActionShortcut(({ browserPageId, key }) => {
+      if (browserPageId !== browserTab.id) {
         return
       }
       handleGrabActionShortcut(key)
@@ -941,7 +1360,11 @@ export default function BrowserPane({
 
     setAddressBarValue(toDisplayUrl(nextUrl))
     onSetUrlRef.current(browserTab.id, nextUrl)
-    onUpdatePageStateRef.current(browserTab.id, { loading: true, loadError: null, title: nextUrl })
+    onUpdatePageStateRef.current(browserTab.id, {
+      loading: true,
+      loadError: null,
+      title: getBrowserDisplayTitle(nextUrl, nextUrl)
+    })
     setResourceNotice(null)
 
     const webview = webviewRef.current
@@ -949,6 +1372,7 @@ export default function BrowserPane({
       return
     }
     trackNextLoadingEventRef.current = nextUrl !== ORCA_BROWSER_BLANK_URL
+    lastKnownWebviewUrlRef.current = nextUrl
     webview.src = nextUrl
     if (nextUrl !== ORCA_BROWSER_BLANK_URL) {
       focusWebviewNow()
@@ -960,8 +1384,24 @@ export default function BrowserPane({
   // Match both so the "New Browser Tab" overlay stays visible for blank tabs.
   const isBlankTab = browserTab.url === 'about:blank' || browserTab.url === ORCA_BROWSER_BLANK_URL
   const externalUrl = getOpenableExternalUrl(webviewRef.current, browserTab.url)
+  const currentBrowserUrl = getCurrentBrowserUrl(webviewRef.current, browserTab.url)
   const loadErrorMeta = getLoadErrorMetadata(browserTab.loadError)
+  const loadErrorHint = formatLoadFailureRecoveryHint(loadErrorMeta)
   const showFailureOverlay = Boolean(browserTab.loadError) && !isBlankTab
+  const downloadProgressLabel = (() => {
+    if (!downloadState) {
+      return null
+    }
+    const received = formatByteCount(downloadState.receivedBytes)
+    const total = formatByteCount(downloadState.totalBytes)
+    if (received && total) {
+      return `${received} / ${total}`
+    }
+    if (total) {
+      return total
+    }
+    return received
+  })()
 
   useEffect(() => {
     const webview = webviewRef.current
@@ -976,12 +1416,251 @@ export default function BrowserPane({
   }, [showFailureOverlay])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col">
-      <div className="relative z-10 flex items-center gap-2 border-b border-border/70 bg-background/95 px-3 py-2">
+    <div
+      className={cn(
+        'absolute inset-0 flex min-h-0 flex-1 flex-col',
+        isActive ? 'z-10' : 'pointer-events-none hidden'
+      )}
+    >
+      {/* IPC-driven context menu — main intercepts guest right-clicks and sends
+          the event here so Orca can offer link actions that require renderer/store access. */}
+      <DropdownMenu
+        open={contextMenu !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setContextMenu(null)
+          }
+        }}
+        modal={false}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-hidden
+            tabIndex={-1}
+            className="pointer-events-none fixed size-px opacity-0"
+            style={{
+              left: contextMenu?.x ?? 0,
+              top: contextMenu?.y ?? 0
+            }}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          className="min-w-[13rem] rounded-[11px] border-border/80 p-1 shadow-[0_16px_36px_rgba(0,0,0,0.24)]"
+          sideOffset={0}
+          align="start"
+        >
+          {contextMenu?.linkUrl ? (
+            <>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (contextMenu.linkUrl) {
+                    createBrowserTab(worktreeId, contextMenu.linkUrl, {
+                      title: contextMenu.linkUrl
+                    })
+                  }
+                }}
+              >
+                Open Link In Orca Browser
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (contextMenu.linkUrl) {
+                    const targetUrl = normalizeExternalBrowserUrl(contextMenu.linkUrl)
+                    if (targetUrl) {
+                      void window.api.shell.openUrl(targetUrl)
+                    }
+                  }
+                }}
+              >
+                Open Link In Default Browser
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void window.api.ui.writeClipboardText(contextMenu?.linkUrl ?? '')
+                }}
+              >
+                Copy Link Address
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
+          <DropdownMenuItem
+            disabled={!browserTab.canGoBack}
+            onSelect={() => webviewRef.current?.goBack()}
+          >
+            Back
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!browserTab.canGoForward}
+            onSelect={() => webviewRef.current?.goForward()}
+          >
+            Forward
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => webviewRef.current?.reload()}>Reload</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              const targetUrl = normalizeExternalBrowserUrl(contextMenu?.pageUrl ?? '')
+              if (targetUrl) {
+                void window.api.shell.openUrl(targetUrl)
+              }
+            }}
+          >
+            Open Page In Default Browser
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              void window.api.ui.writeClipboardText(contextMenu?.pageUrl ?? '')
+            }}
+          >
+            Copy Page URL
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              void window.api.browser.openDevTools({ browserPageId: browserTab.id })
+            }}
+          >
+            Inspect Page
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Browser Settings dialog — uses Radix Portal so layout is unaffected */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Browser Settings</DialogTitle>
+          </DialogHeader>
+          <div className="py-1">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              General
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="browser-home-page">Home Page</Label>
+              <p className="text-xs text-muted-foreground">
+                URL to open when creating a new tab. Leave empty for a blank tab.
+              </p>
+              <Input
+                id="browser-home-page"
+                value={homePageDraft}
+                onChange={(e) => setHomePageDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    saveHomePage()
+                  }
+                }}
+                placeholder="https://google.com"
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Session &amp; Cookies
+            </p>
+            {sessionProfile ? (
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-accent/40 px-3 py-2">
+                <Import className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{sessionProfile.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {sessionProfile.source
+                      ? `Imported from ${sessionProfile.source.browserFamily}${sessionProfile.source.profileName ? ` (${sessionProfile.source.profileName})` : ''}`
+                      : 'Custom session profile'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="mb-3 text-xs text-muted-foreground">
+                Using the default shared session. Import cookies from your browser to use existing
+                logins.
+              </p>
+            )}
+            <div className="space-y-1">
+              {detectedBrowsers.map((browser) => (
+                <Button
+                  key={browser.family}
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={async () => {
+                    const store = useAppStore.getState()
+                    let targetProfileId = sessionProfileId
+                    if (!targetProfileId) {
+                      const profile = await store.createBrowserSessionProfile(
+                        'imported',
+                        `${browser.label} Session`
+                      )
+                      if (!profile) {
+                        return
+                      }
+                      targetProfileId = profile.id
+                    }
+                    void store.importCookiesFromBrowser(targetProfileId, browser.family)
+                    setSettingsOpen(false)
+                  }}
+                >
+                  <Import className="size-3.5" />
+                  Import from {browser.label}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={async () => {
+                  const store = useAppStore.getState()
+                  let targetProfileId = sessionProfileId
+                  if (!targetProfileId) {
+                    const profile = await store.createBrowserSessionProfile(
+                      'imported',
+                      'Imported Session'
+                    )
+                    if (!profile) {
+                      return
+                    }
+                    targetProfileId = profile.id
+                  }
+                  void store.importCookiesToProfile(targetProfileId)
+                  setSettingsOpen(false)
+                }}
+              >
+                <Import className="size-3.5" />
+                Import from File…
+              </Button>
+            </div>
+            {sessionProfile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full justify-start gap-2 text-destructive hover:text-destructive"
+                onClick={async () => {
+                  await useAppStore.getState().deleteBrowserSessionProfile(sessionProfile.id)
+                  setSettingsOpen(false)
+                }}
+              >
+                Clear Imported Session
+              </Button>
+            )}
+          </div>
+          <DialogFooter>
+            <Button size="sm" onClick={saveHomePage}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="relative z-10 flex items-center gap-2 border-b border-border/70 bg-background/95 px-3 py-1.5">
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => webviewRef.current?.goBack()}
           disabled={!browserTab.canGoBack}
         >
@@ -990,7 +1669,7 @@ export default function BrowserPane({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => webviewRef.current?.goForward()}
           disabled={!browserTab.canGoForward}
         >
@@ -999,7 +1678,7 @@ export default function BrowserPane({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => {
             const webview = webviewRef.current
             if (!webview) {
@@ -1022,7 +1701,7 @@ export default function BrowserPane({
         </Button>
 
         <form
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3 py-1.5 shadow-sm"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3 py-1 shadow-sm"
           onSubmit={(event) => {
             event.preventDefault()
             submitAddressBar()
@@ -1054,8 +1733,8 @@ export default function BrowserPane({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
-          onClick={() => void window.api.browser.openDevTools({ browserTabId: browserTab.id })}
+          className="h-7 w-7"
+          onClick={() => void window.api.browser.openDevTools({ browserPageId: browserTab.id })}
           title="Open browser devtools"
         >
           <SquareCode className="size-4" />
@@ -1064,7 +1743,7 @@ export default function BrowserPane({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => {
             if (!externalUrl) {
               return
@@ -1076,10 +1755,85 @@ export default function BrowserPane({
         >
           <ExternalLink className="size-4" />
         </Button>
+
+        {sessionProfile && (
+          <div
+            className="flex h-6 items-center gap-1 rounded-md bg-accent/60 px-2 text-[10px] font-medium text-muted-foreground"
+            title={`Session: ${sessionProfile.label}${sessionProfile.source?.browserFamily ? ` (${sessionProfile.source.browserFamily})` : ''}`}
+          >
+            <Import className="size-3" />
+            {sessionProfile.label}
+          </div>
+        )}
+
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          title="Browser Settings"
+          onClick={() => {
+            useAppStore.getState().openSettingsTarget({ pane: 'general', repoId: null })
+            useAppStore.getState().setActiveView('settings')
+          }}
+        >
+          <Settings className="size-4" />
+        </Button>
       </div>
+      {downloadState ? (
+        <div className="flex items-center gap-3 border-b border-border/60 bg-amber-500/10 px-3 py-2 text-xs text-foreground/90">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium text-foreground">{downloadState.filename}</div>
+            <div className="truncate text-muted-foreground">
+              {downloadState.status === 'requested'
+                ? `Download from ${downloadState.origin}`
+                : `Downloading from ${downloadState.origin}${downloadProgressLabel ? ` • ${downloadProgressLabel}` : ''}`}
+            </div>
+          </div>
+          {downloadState.status === 'requested' ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                onClick={() => {
+                  void window.api.browser.acceptDownload({
+                    downloadId: downloadState.downloadId
+                  })
+                }}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7"
+                onClick={() => {
+                  void window.api.browser.cancelDownload({
+                    downloadId: downloadState.downloadId
+                  })
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <span className="shrink-0 text-muted-foreground">
+              {downloadProgressLabel ?? 'Downloading'}
+            </span>
+          )}
+        </div>
+      ) : null}
       {resourceNotice ? (
-        <div className="border-b border-border/60 bg-background px-3 py-1.5 text-xs text-muted-foreground">
-          {resourceNotice}
+        <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-background px-3 py-1.5 text-xs text-muted-foreground">
+          <span>{resourceNotice}</span>
+          <button
+            type="button"
+            onClick={() => setResourceNotice(null)}
+            className="shrink-0 text-muted-foreground/60 hover:text-foreground"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       ) : null}
       {grab.state !== 'idle' ? (
@@ -1107,8 +1861,8 @@ export default function BrowserPane({
             {grab.state === 'error'
               ? `Grab failed: ${grab.error ?? 'Unknown error'}`
               : grab.state === 'confirming'
-                ? 'Copied — press S for screenshot, or click another element'
-                : 'Click to copy, or hover and press C. S for screenshot.'}
+                ? 'Copied — press S to screenshot, or select another element'
+                : 'Click or hover an element, then press C to copy or S to screenshot.'}
           </span>
           <button
             className="ml-auto shrink-0 rounded px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
@@ -1132,8 +1886,11 @@ export default function BrowserPane({
                 {loadErrorMeta.host ? `Can't reach ${loadErrorMeta.host}` : "Can't load this page"}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {getFriendlyLoadErrorDescription(browserTab.loadError)}
+                {formatLoadFailureDescription(browserTab.loadError, loadErrorMeta)}
               </p>
+              {loadErrorHint ? (
+                <p className="mt-2 text-xs text-muted-foreground/80">{loadErrorHint}</p>
+              ) : null}
               <div className="mt-5 flex items-center gap-2">
                 <Button
                   size="sm"
@@ -1154,6 +1911,43 @@ export default function BrowserPane({
                   <RefreshCw className="size-4" />
                   <span>Refresh</span>
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 gap-2 px-3"
+                  title="Copy failed page URL"
+                  onClick={() => {
+                    // Why: failed guests often leave users stranded on a blank
+                    // error surface. Put the current URL on the clipboard from
+                    // the recovery UI itself so they can retry elsewhere
+                    // without having to discover the toolbar overflow first.
+                    void window.api.ui.writeClipboardText(currentBrowserUrl)
+                    setResourceNotice('Copied the current page URL.')
+                  }}
+                >
+                  <Copy className="size-4" />
+                  <span>Copy Address</span>
+                </Button>
+                {externalUrl ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 gap-2 px-3"
+                    title="Open failed page in default browser"
+                    onClick={() => {
+                      // Why: page failures inside Orca can still be recoverable
+                      // in the system browser, especially for OAuth, captive
+                      // portals, or enterprise auth flows that rely on a full
+                      // browser profile. Keep this action in the failed-state
+                      // overlay so recovery does not depend on toolbar affordance
+                      // discovery while the guest itself is unusable.
+                      void window.api.shell.openUrl(externalUrl)
+                    }}
+                  >
+                    <ExternalLink className="size-4" />
+                    <span>Open Externally</span>
+                  </Button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1165,7 +1959,7 @@ export default function BrowserPane({
                 <Globe className="size-5 text-muted-foreground" />
               </div>
               <div className="text-center">
-                <p className="text-base font-semibold text-foreground/85">New Browser Tab</p>
+                <p className="text-base font-semibold text-foreground/85">New Tab</p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Type a URL above to start browsing.
                 </p>
