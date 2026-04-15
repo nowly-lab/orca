@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- Why: these small settings form primitives and controls
+co-locate shared layout and keyboard interaction logic, which keeps the settings
+panel wiring simple even though the file exceeds the default line limit. */
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ScrollArea } from '../ui/scroll-area'
 import { Input } from '../ui/input'
@@ -253,15 +256,27 @@ export function FontAutocomplete({
     return normalizedQuery ? [...startsWith, ...includes] : suggestions
   }, [suggestions, normalizedQuery])
 
-  useEffect(() => {
+  // Why: sync the highlighted index during render rather than via useEffect so
+  // the correct item is highlighted on the very first paint after open/filter
+  // changes — useEffect would leave one render with the stale index visible.
+  const [prevFilteredSuggestions, setPrevFilteredSuggestions] = useState(filteredSuggestions)
+  const [prevOpen, setPrevOpen] = useState(open)
+  const [prevHighlightedValue, setPrevHighlightedValue] = useState(value)
+  if (
+    filteredSuggestions !== prevFilteredSuggestions ||
+    open !== prevOpen ||
+    value !== prevHighlightedValue
+  ) {
+    setPrevFilteredSuggestions(filteredSuggestions)
+    setPrevOpen(open)
+    setPrevHighlightedValue(value)
     if (!open || filteredSuggestions.length === 0) {
       setHighlightedIndex(-1)
-      return
+    } else {
+      const selectedIndex = filteredSuggestions.findIndex((font) => font === value)
+      setHighlightedIndex(Math.max(selectedIndex, 0))
     }
-
-    const selectedIndex = filteredSuggestions.findIndex((font) => font === value)
-    setHighlightedIndex(Math.max(selectedIndex, 0))
-  }, [filteredSuggestions, open, value])
+  }
 
   useEffect(() => {
     if (!open || highlightedIndex < 0) {
