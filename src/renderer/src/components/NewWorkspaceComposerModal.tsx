@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import NewWorkspaceComposerCard from '@/components/NewWorkspaceComposerCard'
 import { useComposerState } from '@/hooks/useComposerState'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
+import { shouldSuppressEnterSubmit } from '@/lib/new-workspace-enter-guard'
 
 type ComposerModalData = {
   prefilledName?: string
@@ -102,7 +103,7 @@ function ComposerModalBody({
       if (createDisabled) {
         return
       }
-      if (target instanceof HTMLTextAreaElement && event.shiftKey) {
+      if (shouldSuppressEnterSubmit(event, target instanceof HTMLTextAreaElement)) {
         return
       }
       event.preventDefault()
