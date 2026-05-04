@@ -202,7 +202,8 @@ export function getDefaultSettings(homedir: string): GlobalSettings {
     experimentalMobile: false,
     // Why: off by default — opt-in cosmetic joke feature. Leaving the default
     // false keeps the overlay unmounted for users who never enable it.
-    experimentalSidekick: false
+    experimentalSidekick: false,
+    experimentalWorktreeSymlinks: false
   }
 }
 

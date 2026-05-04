@@ -37,6 +37,12 @@ export type Repo = {
    *  identically to `'auto'`; writers leave it undefined on creation so
    *  existing persisted records stay forward-compatible. */
   issueSourcePreference?: IssueSourcePreference
+  /** Paths (relative to the primary checkout) that should be symlinked into
+   *  newly created worktrees of this repo. Consumed only when the global
+   *  `experimentalWorktreeSymlinks` flag is on — the per-repo list is the
+   *  "what to link", the global flag is the "whether to link at all" switch.
+   *  Undefined/empty means no symlinks are created for this repo. */
+  symlinkPaths?: string[]
 }
 
 export type SetupRunPolicy = 'ask' | 'run-by-default' | 'skip-by-default'
@@ -1158,6 +1164,12 @@ export type GlobalSettings = {
    *  off never mount the overlay. Toggling takes effect immediately in the
    *  current session (no relaunch) because it is purely renderer-side. */
   experimentalSidekick: boolean
+  /** Experimental: when creating a worktree, automatically symlink a
+   *  user-configured set of files/folders from the primary checkout (e.g.
+   *  `.env`, `node_modules`) into the new worktree. Opt-in while the
+   *  configuration surface and edge cases (conflicts with existing paths,
+   *  cleanup on worktree delete) are still being worked out. */
+  experimentalWorktreeSymlinks: boolean
   /** Anonymous product-telemetry state. Optional because the one-shot
    *  migration in `Store.load()` is what populates it on first boot of the
    *  telemetry release; before migration runs, the field is absent. After
