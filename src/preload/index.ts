@@ -395,6 +395,24 @@ const api = {
       return () => ipcRenderer.removeListener('pty:exit', listener)
     },
 
+    onSerializeBufferRequest: (
+      callback: (data: { requestId: string; ptyId: string }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        data: { requestId: string; ptyId: string }
+      ) => callback(data)
+      ipcRenderer.on('pty:serializeBuffer:request', listener)
+      return () => ipcRenderer.removeListener('pty:serializeBuffer:request', listener)
+    },
+
+    sendSerializedBuffer: (
+      requestId: string,
+      snapshot: { data: string; cols: number; rows: number } | null
+    ): void => {
+      ipcRenderer.send('pty:serializeBuffer:response', { requestId, snapshot })
+    },
+
     management: {
       listSessions: () => ipcRenderer.invoke('pty:management:listSessions'),
       killAll: () => ipcRenderer.invoke('pty:management:killAll'),
@@ -1462,6 +1480,7 @@ const api = {
         repoId: string
         worktreeId: string
         setup?: { runnerScriptPath: string; envVars: Record<string, string> }
+        startup?: { command: string; env?: Record<string, string> }
       }) => void
     ): (() => void) => {
       const listener = (
@@ -1470,6 +1489,7 @@ const api = {
           repoId: string
           worktreeId: string
           setup?: { runnerScriptPath: string; envVars: Record<string, string> }
+          startup?: { command: string; env?: Record<string, string> }
         }
       ) => callback(data)
       ipcRenderer.on('ui:activateWorktree', listener)
@@ -1557,6 +1577,12 @@ const api = {
       ) => callback(data)
       ipcRenderer.on('ui:closeTerminal', listener)
       return () => ipcRenderer.removeListener('ui:closeTerminal', listener)
+    },
+    onSleepWorktree: (callback: (data: { worktreeId: string }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { worktreeId: string }) =>
+        callback(data)
+      ipcRenderer.on('ui:sleepWorktree', listener)
+      return () => ipcRenderer.removeListener('ui:sleepWorktree', listener)
     },
     onTerminalZoom: (callback: (direction: 'in' | 'out' | 'reset') => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, direction: 'in' | 'out' | 'reset') =>
@@ -1673,7 +1699,27 @@ const api = {
   runtime: {
     syncWindowGraph: (graph: RuntimeSyncWindowGraph): Promise<RuntimeStatus> =>
       ipcRenderer.invoke('runtime:syncWindowGraph', graph),
-    getStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:getStatus')
+    getStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:getStatus'),
+    getTerminalFitOverrides: (): Promise<
+      { ptyId: string; mode: 'mobile-fit'; cols: number; rows: number }[]
+    > => ipcRenderer.invoke('runtime:getTerminalFitOverrides'),
+    restoreTerminalFit: (ptyId: string): Promise<{ restored: boolean }> =>
+      ipcRenderer.invoke('runtime:restoreTerminalFit', { ptyId }),
+    onTerminalFitOverrideChanged: (
+      callback: (event: {
+        ptyId: string
+        mode: 'mobile-fit' | 'desktop-fit'
+        cols: number
+        rows: number
+      }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        data: { ptyId: string; mode: 'mobile-fit' | 'desktop-fit'; cols: number; rows: number }
+      ) => callback(data)
+      ipcRenderer.on('runtime:terminalFitOverrideChanged', listener)
+      return () => ipcRenderer.removeListener('runtime:terminalFitOverrideChanged', listener)
+    }
   },
 
   rateLimits: {
@@ -1822,6 +1868,29 @@ const api = {
   },
   e2e: {
     getConfig: () => preloadE2EConfig
+  },
+
+  mobile: {
+    listNetworkInterfaces: (): Promise<{
+      interfaces: { name: string; address: string }[]
+    }> => ipcRenderer.invoke('mobile:listNetworkInterfaces'),
+
+    getPairingQR: (args?: {
+      address?: string
+    }): Promise<
+      | { available: false }
+      | { available: true; qrDataUrl: string; endpoint: string; deviceId: string }
+    > => ipcRenderer.invoke('mobile:getPairingQR', args),
+
+    listDevices: (): Promise<{
+      devices: { deviceId: string; name: string; pairedAt: number; lastSeenAt: number }[]
+    }> => ipcRenderer.invoke('mobile:listDevices'),
+
+    revokeDevice: (args: { deviceId: string }): Promise<{ revoked: boolean }> =>
+      ipcRenderer.invoke('mobile:revokeDevice', args),
+
+    isWebSocketReady: (): Promise<{ ready: boolean; endpoint: string | null }> =>
+      ipcRenderer.invoke('mobile:isWebSocketReady')
   },
 
   agentStatus: {

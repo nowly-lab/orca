@@ -1,6 +1,6 @@
 import { createConnection } from 'net'
 import { randomUUID } from 'crypto'
-import type { RuntimeMetadata, RuntimeTransportMetadata } from '../../shared/runtime-bootstrap'
+import { findTransport, type RuntimeMetadata } from '../../shared/runtime-bootstrap'
 import { isKeepaliveFrame, RuntimeRpcEnvelopeSchema } from './envelope-schema'
 import { RuntimeClientError, type RuntimeRpcResponse } from './types'
 
@@ -11,7 +11,17 @@ export async function sendRequest<TResult>(
   timeoutMs: number
 ): Promise<RuntimeRpcResponse<TResult>> {
   return await new Promise((resolve, reject) => {
-    const socket = createConnection(getTransportEndpoint(metadata.transport!))
+    const transport = findTransport(metadata, 'unix', 'named-pipe')
+    if (!transport) {
+      reject(
+        new RuntimeClientError(
+          'runtime_unavailable',
+          'No compatible transport found in Orca runtime metadata.'
+        )
+      )
+      return
+    }
+    const socket = createConnection(transport.endpoint)
     let buffer = ''
     let settled = false
     const requestId = randomUUID()
@@ -158,8 +168,4 @@ export async function sendRequest<TResult>(
       )
     })
   })
-}
-
-function getTransportEndpoint(transport: RuntimeTransportMetadata): string {
-  return transport.endpoint
 }

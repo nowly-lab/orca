@@ -2,7 +2,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeMeta } from '../../shared/types'
 import { addWorktree, listWorktrees, removeWorktree } from '../git/worktree'
-import { createSetupRunnerScript, getEffectiveHooks, runHook } from '../hooks'
+import {
+  createSetupRunnerScript,
+  getEffectiveHooks,
+  runHook,
+  shouldRunSetupForCreate
+} from '../hooks'
 import { OrchestrationDb } from './orchestration/db'
 import { OrcaRuntimeService } from './orca-runtime'
 
@@ -39,7 +44,12 @@ vi.mock('../git/worktree', () => ({
 vi.mock('../hooks', () => ({
   createSetupRunnerScript: vi.fn(),
   getEffectiveHooks: vi.fn().mockReturnValue(null),
-  runHook: vi.fn().mockResolvedValue({ success: true, output: '' })
+  runHook: vi.fn().mockResolvedValue({ success: true, output: '' }),
+  shouldRunSetupForCreate: vi
+    .fn()
+    .mockImplementation((_repo: never, decision: string) => decision === 'run'),
+  getEffectiveSetupRunPolicy: vi.fn().mockReturnValue('auto'),
+  hasHooksFile: vi.fn().mockReturnValue(false)
 }))
 
 vi.mock('../ipc/worktree-logic', async (importOriginal) => {
@@ -77,6 +87,8 @@ afterEach(() => {
   vi.mocked(createSetupRunnerScript).mockReset()
   vi.mocked(getEffectiveHooks).mockReset()
   vi.mocked(runHook).mockReset()
+  vi.mocked(shouldRunSetupForCreate).mockReset()
+  vi.mocked(shouldRunSetupForCreate).mockImplementation((_repo, decision) => decision === 'run')
   vi.mocked(getEffectiveHooks).mockReturnValue(null)
   computeWorktreePathMock.mockReset()
   ensurePathWithinWorkspaceMock.mockReset()
@@ -156,6 +168,7 @@ const store = {
       ...meta
     }) as never,
   removeWorktreeMeta: () => {},
+  getGitHubCache: () => undefined as never,
   getSettings: () => ({
     workspaceDir: '/tmp/workspaces',
     nestWorkspaces: false,
@@ -763,7 +776,11 @@ describe('OrcaRuntimeService', () => {
           repo: 'repo',
           path: '/tmp/worktree-a',
           branch: 'feature/foo',
+          displayName: 'foo',
           linkedIssue: 123,
+          linkedPR: null,
+          isPinned: false,
+          status: 'active',
           unread: false,
           liveTerminalCount: 1,
           hasAttachedPty: true,
@@ -926,7 +943,9 @@ describe('OrcaRuntimeService', () => {
       splitTerminal: vi.fn(),
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
-      closeTerminal: vi.fn()
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn()
     })
     runtime.attachWindow(1)
 
@@ -1001,7 +1020,9 @@ describe('OrcaRuntimeService', () => {
       splitTerminal: vi.fn(),
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
-      closeTerminal: vi.fn()
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn()
     })
     runtime.attachWindow(1)
 
@@ -1092,7 +1113,9 @@ describe('OrcaRuntimeService', () => {
       splitTerminal: vi.fn(),
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
-      closeTerminal: vi.fn()
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn()
     })
 
     computeWorktreePathMock.mockReturnValue('/tmp/workspaces/cli-worktree')
@@ -1150,6 +1173,7 @@ describe('OrcaRuntimeService', () => {
         return nextMeta
       },
       removeWorktreeMeta: () => {},
+      getGitHubCache: () => undefined as never,
       getSettings: () => ({
         workspaceDir: 'C:\\workspaces',
         nestWorkspaces: false,

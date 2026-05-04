@@ -63,6 +63,7 @@ type SettingsNavTarget =
   | 'ssh'
   | 'experimental'
   | 'agents'
+  | 'mobile'
   | 'repo'
 
 type SettingsNavSection = {

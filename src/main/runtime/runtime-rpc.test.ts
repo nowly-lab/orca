@@ -167,8 +167,8 @@ describe('OrcaRuntimeRpcServer', () => {
     const metadata = readRuntimeMetadata(userDataPath)
     expect(metadata?.runtimeId).toBe(runtime.getRuntimeId())
     expect(metadata?.authToken).toBeTruthy()
-    expect(metadata?.transport?.endpoint).toBeTruthy()
-    expect(metadata?.transport).toEqual(server['transport'])
+    expect(metadata?.transports?.[0]?.endpoint).toBeTruthy()
+    expect(metadata?.transports).toEqual(server['transports'])
 
     await server.stop()
     expect(readRuntimeMetadata(userDataPath)).toMatchObject({
@@ -215,8 +215,8 @@ describe('OrcaRuntimeRpcServer', () => {
     await expect(server.start()).rejects.toThrow('write failed')
     expect(readRuntimeMetadata(userDataPath)).toBeNull()
     expect(existsSync(endpoint)).toBe(false)
-    expect(server['transport']).toBeNull()
-    expect(server['server']).toBeNull()
+    expect(server['transports']).toEqual([])
+    expect(server['activeTransports']).toEqual([])
 
     writeMetadataSpy.mockRestore()
   })
@@ -229,7 +229,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const response = await sendRequest(metadata!.transport!.endpoint, {
+    const response = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_1',
       authToken: metadata!.authToken,
       method: 'status.get'
@@ -255,7 +255,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const response = await sendRequest(metadata!.transport!.endpoint, {
+    const response = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_1',
       authToken: 'wrong',
       method: 'status.get'
@@ -280,7 +280,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const response = await sendRequest(metadata!.transport!.endpoint, {
+    const response = await sendRequest(metadata!.transports[0]!.endpoint, {
       authToken: metadata!.authToken,
       method: 'status.get'
     })
@@ -336,7 +336,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const listResponse = await sendRequest(metadata!.transport!.endpoint, {
+    const listResponse = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_list',
       authToken: metadata!.authToken,
       method: 'terminal.list',
@@ -360,7 +360,7 @@ describe('OrcaRuntimeRpcServer', () => {
     ).handle
     expect(handle).toBeTruthy()
 
-    const showResponse = await sendRequest(metadata!.transport!.endpoint, {
+    const showResponse = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_show',
       authToken: metadata!.authToken,
       method: 'terminal.show',
@@ -373,7 +373,7 @@ describe('OrcaRuntimeRpcServer', () => {
       ok: true
     })
 
-    const readResponse = await sendRequest(metadata!.transport!.endpoint, {
+    const readResponse = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_read',
       authToken: metadata!.authToken,
       method: 'terminal.read',
@@ -386,7 +386,7 @@ describe('OrcaRuntimeRpcServer', () => {
       ok: true
     })
 
-    const sendResponse = await sendRequest(metadata!.transport!.endpoint, {
+    const sendResponse = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_send',
       authToken: metadata!.authToken,
       method: 'terminal.send',
@@ -402,7 +402,7 @@ describe('OrcaRuntimeRpcServer', () => {
     })
     expect(writes).toEqual(['continue', '\r'])
 
-    const waitPromise = sendRequest(metadata!.transport!.endpoint, {
+    const waitPromise = sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_wait',
       authToken: metadata!.authToken,
       method: 'terminal.wait',
@@ -462,7 +462,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const response = await sendRequest(metadata!.transport!.endpoint, {
+    const response = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_ps',
       authToken: metadata!.authToken,
       method: 'worktree.ps'
@@ -503,7 +503,7 @@ describe('OrcaRuntimeRpcServer', () => {
     await server.start()
 
     const metadata = readRuntimeMetadata(userDataPath)
-    const response = await sendRequest(metadata!.transport!.endpoint, {
+    const response = await sendRequest(metadata!.transports[0]!.endpoint, {
       id: 'req_worktrees',
       authToken: metadata!.authToken,
       method: 'worktree.list',
@@ -533,7 +533,7 @@ describe('OrcaRuntimeRpcServer', () => {
 
     const metadata = readRuntimeMetadata(userDataPath)
     const response = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      const socket = createConnection(metadata!.transport!.endpoint)
+      const socket = createConnection(metadata!.transports[0]!.endpoint)
       let buffer = ''
       socket.setEncoding('utf8')
       socket.once('error', reject)
@@ -581,7 +581,7 @@ describe('OrcaRuntimeRpcServer', () => {
 
       try {
         const metadata = readRuntimeMetadata(userDataPath)
-        const session = openFramedSession(metadata!.transport!.endpoint, {
+        const session = openFramedSession(metadata!.transports[0]!.endpoint, {
           id: 'req_wait',
           authToken: metadata!.authToken,
           method: 'orchestration.check',
@@ -621,7 +621,7 @@ describe('OrcaRuntimeRpcServer', () => {
 
       try {
         const metadata = readRuntimeMetadata(userDataPath)
-        const endpoint = metadata!.transport!.endpoint
+        const endpoint = metadata!.transports[0]!.endpoint
 
         // Fill the cap with two long waits (10s each — we'll kill them).
         const a = openFramedSession(endpoint, {
@@ -681,7 +681,7 @@ describe('OrcaRuntimeRpcServer', () => {
 
       try {
         const metadata = readRuntimeMetadata(userDataPath)
-        const endpoint = metadata!.transport!.endpoint
+        const endpoint = metadata!.transports[0]!.endpoint
 
         const a = openFramedSession(endpoint, {
           id: 'req_a',
@@ -719,6 +719,73 @@ describe('OrcaRuntimeRpcServer', () => {
         await a.done
       } finally {
         db.close()
+        await server.stop()
+      }
+    })
+
+    it('does not emit keepalive frames for short RPCs', async () => {
+      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+      const runtime = new OrcaRuntimeService()
+      // Why: a 10ms interval means any frame in the first ~100ms of a short
+      // RPC would show up; `status.get` returns in <10ms so no keepalive
+      // should ever fire. Locks in the "keepalive is long-poll-only" invariant
+      // so a future refactor can't silently re-broaden the timer.
+      const server = new OrcaRuntimeRpcServer({
+        runtime,
+        userDataPath,
+        keepaliveIntervalMs: 10
+      })
+      await server.start()
+
+      try {
+        const metadata = readRuntimeMetadata(userDataPath)
+        const session = openFramedSession(metadata!.transports[0]!.endpoint, {
+          id: 'req_short',
+          authToken: metadata!.authToken,
+          method: 'status.get'
+        })
+        await session.done
+
+        const keepalives = session.frames.filter((f) => f._keepalive === true)
+        const terminals = session.frames.filter((f) => f.ok !== undefined)
+        expect(terminals).toHaveLength(1)
+        expect(terminals[0]).toMatchObject({ id: 'req_short', ok: true })
+        expect(keepalives).toHaveLength(0)
+      } finally {
+        await server.stop()
+      }
+    })
+
+    it('returns an internal_error envelope when the dispatcher throws', async () => {
+      // Why: handlers are designed to return error envelopes, never to throw,
+      // but a bug somewhere in the RPC stack (e.g. JSON.stringify choking on
+      // a response with circular refs) must still produce a terminal frame.
+      // Without the `.catch` on handleMessage's promise, a throw would leave
+      // the client hanging until the 30s idle timer and leak the dispatch's
+      // AbortController in the transport's in-flight set.
+      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+      const runtime = new OrcaRuntimeService()
+      const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
+      await server.start()
+
+      // Force the dispatcher to throw a non-envelope error.
+      const originalDispatch = server['dispatcher'].dispatch.bind(server['dispatcher'])
+      server['dispatcher'].dispatch = vi.fn().mockRejectedValue(new Error('boom'))
+
+      try {
+        const metadata = readRuntimeMetadata(userDataPath)
+        const response = await sendRequest(metadata!.transports[0]!.endpoint, {
+          id: 'req_throw',
+          authToken: metadata!.authToken,
+          method: 'status.get'
+        })
+        expect(response).toMatchObject({
+          id: 'req_throw',
+          ok: false,
+          error: { code: 'internal_error', message: 'boom' }
+        })
+      } finally {
+        server['dispatcher'].dispatch = originalDispatch
         await server.stop()
       }
     })
