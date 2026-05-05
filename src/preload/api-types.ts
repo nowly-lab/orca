@@ -41,6 +41,7 @@ import type {
   LinearTeam,
   MarkdownDocument,
   GitHubIssueUpdate,
+  GetRateLimitResult,
   NotificationDispatchRequest,
   NotificationDispatchResult,
   OrcaHooks,
@@ -61,6 +62,33 @@ import type {
   WorktreeStartupLaunch,
   WorkspaceSessionState
 } from '../shared/types'
+import type {
+  AddIssueCommentBySlugArgs,
+  ClearProjectItemFieldArgs,
+  DeleteIssueCommentBySlugArgs,
+  GetProjectViewTableArgs,
+  GetProjectViewTableResult,
+  GitHubProjectCommentMutationResult,
+  GitHubProjectMutationResult,
+  ListAccessibleProjectsResult,
+  ListAssignableUsersBySlugArgs,
+  ListAssignableUsersBySlugResult,
+  ListIssueTypesBySlugArgs,
+  ListIssueTypesBySlugResult,
+  ListLabelsBySlugArgs,
+  ListLabelsBySlugResult,
+  ListProjectViewsArgs,
+  ListProjectViewsResult,
+  ProjectWorkItemDetailsBySlugArgs,
+  ProjectWorkItemDetailsBySlugResult,
+  ResolveProjectRefArgs,
+  ResolveProjectRefResult,
+  UpdateIssueBySlugArgs,
+  UpdateIssueCommentBySlugArgs,
+  UpdateIssueTypeBySlugArgs,
+  UpdatePullRequestBySlugArgs,
+  UpdateProjectItemFieldArgs
+} from '../shared/github-project-types'
 import type {
   BrowserSetGrabModeArgs,
   BrowserSetGrabModeResult,
@@ -549,6 +577,47 @@ export type PreloadApi = {
     listAssignableUsers: (args: { repoPath: string }) => Promise<GitHubAssignableUser[]>
     checkOrcaStarred: () => Promise<boolean | null>
     starOrca: () => Promise<boolean>
+    /**
+     * GitHub API rate-limit snapshot. Does NOT consume quota (the
+     * `rate_limit` endpoint is exempt). Cached 30s server-side — pass
+     * `force: true` to bust after a known-expensive op.
+     */
+    rateLimit: (args?: { force?: boolean }) => Promise<GetRateLimitResult>
+    // ── ProjectV2 (GitHub Projects) ─────────────────────────────────
+    listAccessibleProjects: () => Promise<ListAccessibleProjectsResult>
+    resolveProjectRef: (args: ResolveProjectRefArgs) => Promise<ResolveProjectRefResult>
+    listProjectViews: (args: ListProjectViewsArgs) => Promise<ListProjectViewsResult>
+    getProjectViewTable: (args: GetProjectViewTableArgs) => Promise<GetProjectViewTableResult>
+    projectWorkItemDetailsBySlug: (
+      args: ProjectWorkItemDetailsBySlugArgs
+    ) => Promise<ProjectWorkItemDetailsBySlugResult>
+    updateProjectItemField: (
+      args: UpdateProjectItemFieldArgs
+    ) => Promise<GitHubProjectMutationResult>
+    clearProjectItemField: (
+      args: ClearProjectItemFieldArgs
+    ) => Promise<GitHubProjectMutationResult>
+    updateIssueBySlug: (args: UpdateIssueBySlugArgs) => Promise<GitHubProjectMutationResult>
+    updatePullRequestBySlug: (
+      args: UpdatePullRequestBySlugArgs
+    ) => Promise<GitHubProjectMutationResult>
+    addIssueCommentBySlug: (
+      args: AddIssueCommentBySlugArgs
+    ) => Promise<GitHubProjectCommentMutationResult>
+    updateIssueCommentBySlug: (
+      args: UpdateIssueCommentBySlugArgs
+    ) => Promise<GitHubProjectMutationResult>
+    deleteIssueCommentBySlug: (
+      args: DeleteIssueCommentBySlugArgs
+    ) => Promise<GitHubProjectMutationResult>
+    listLabelsBySlug: (args: ListLabelsBySlugArgs) => Promise<ListLabelsBySlugResult>
+    listAssignableUsersBySlug: (
+      args: ListAssignableUsersBySlugArgs
+    ) => Promise<ListAssignableUsersBySlugResult>
+    listIssueTypesBySlug: (args: ListIssueTypesBySlugArgs) => Promise<ListIssueTypesBySlugResult>
+    updateIssueTypeBySlug: (
+      args: UpdateIssueTypeBySlugArgs
+    ) => Promise<GitHubProjectMutationResult>
   }
   linear: {
     connect: (args: {

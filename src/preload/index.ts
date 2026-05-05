@@ -13,6 +13,7 @@ import type {
   CreateWorktreeArgs,
   CustomSidekick,
   FsChangedPayload,
+  GetRateLimitResult,
   GitHubAssignableUser,
   GitHubCommentResult,
   GitHubWorkItem,
@@ -24,6 +25,33 @@ import type {
 } from '../shared/types'
 import type { RuntimeStatus, RuntimeSyncWindowGraph } from '../shared/runtime-types'
 import type { RateLimitState } from '../shared/rate-limit-types'
+import type {
+  AddIssueCommentBySlugArgs,
+  ClearProjectItemFieldArgs,
+  DeleteIssueCommentBySlugArgs,
+  GetProjectViewTableArgs,
+  GetProjectViewTableResult,
+  GitHubProjectCommentMutationResult,
+  GitHubProjectMutationResult,
+  ListAccessibleProjectsResult,
+  ListAssignableUsersBySlugArgs,
+  ListAssignableUsersBySlugResult,
+  ListIssueTypesBySlugArgs,
+  ListIssueTypesBySlugResult,
+  ListLabelsBySlugArgs,
+  ListLabelsBySlugResult,
+  ListProjectViewsArgs,
+  ListProjectViewsResult,
+  ProjectWorkItemDetailsBySlugArgs,
+  ProjectWorkItemDetailsBySlugResult,
+  ResolveProjectRefArgs,
+  ResolveProjectRefResult,
+  UpdateIssueBySlugArgs,
+  UpdateIssueCommentBySlugArgs,
+  UpdateIssueTypeBySlugArgs,
+  UpdatePullRequestBySlugArgs,
+  UpdateProjectItemFieldArgs
+} from '../shared/github-project-types'
 import type {
   SshConnectionState,
   SshTarget,
@@ -589,7 +617,65 @@ const api = {
       ipcRenderer.invoke('gh:listAssignableUsers', args),
 
     checkOrcaStarred: (): Promise<boolean | null> => ipcRenderer.invoke('gh:checkOrcaStarred'),
-    starOrca: (): Promise<boolean> => ipcRenderer.invoke('gh:starOrca')
+    starOrca: (): Promise<boolean> => ipcRenderer.invoke('gh:starOrca'),
+
+    // Why: rate_limit is exempt from rate-limit accounting, but we still pass
+    // `force` through so callers can bust the 30s in-process cache after a
+    // known-expensive op (e.g. after ProjectPicker discovery).
+    rateLimit: (args?: { force?: boolean }): Promise<GetRateLimitResult> =>
+      ipcRenderer.invoke('gh:rateLimit', args),
+
+    // ── ProjectV2 (GitHub Projects) ───────────────────────────────────
+    listAccessibleProjects: (): Promise<ListAccessibleProjectsResult> =>
+      ipcRenderer.invoke('gh:listAccessibleProjects'),
+    resolveProjectRef: (args: ResolveProjectRefArgs): Promise<ResolveProjectRefResult> =>
+      ipcRenderer.invoke('gh:resolveProjectRef', args),
+    listProjectViews: (args: ListProjectViewsArgs): Promise<ListProjectViewsResult> =>
+      ipcRenderer.invoke('gh:listProjectViews', args),
+    getProjectViewTable: (args: GetProjectViewTableArgs): Promise<GetProjectViewTableResult> =>
+      ipcRenderer.invoke('gh:getProjectViewTable', args),
+    projectWorkItemDetailsBySlug: (
+      args: ProjectWorkItemDetailsBySlugArgs
+    ): Promise<ProjectWorkItemDetailsBySlugResult> =>
+      ipcRenderer.invoke('gh:projectWorkItemDetailsBySlug', args),
+    updateProjectItemField: (
+      args: UpdateProjectItemFieldArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:updateProjectItemField', args),
+    clearProjectItemField: (
+      args: ClearProjectItemFieldArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:clearProjectItemField', args),
+    updateIssueBySlug: (args: UpdateIssueBySlugArgs): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:updateIssueBySlug', args),
+    updatePullRequestBySlug: (
+      args: UpdatePullRequestBySlugArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:updatePullRequestBySlug', args),
+    addIssueCommentBySlug: (
+      args: AddIssueCommentBySlugArgs
+    ): Promise<GitHubProjectCommentMutationResult> =>
+      ipcRenderer.invoke('gh:addIssueCommentBySlug', args),
+    updateIssueCommentBySlug: (
+      args: UpdateIssueCommentBySlugArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:updateIssueCommentBySlug', args),
+    deleteIssueCommentBySlug: (
+      args: DeleteIssueCommentBySlugArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:deleteIssueCommentBySlug', args),
+    listLabelsBySlug: (args: ListLabelsBySlugArgs): Promise<ListLabelsBySlugResult> =>
+      ipcRenderer.invoke('gh:listLabelsBySlug', args),
+    listAssignableUsersBySlug: (
+      args: ListAssignableUsersBySlugArgs
+    ): Promise<ListAssignableUsersBySlugResult> =>
+      ipcRenderer.invoke('gh:listAssignableUsersBySlug', args),
+    listIssueTypesBySlug: (args: ListIssueTypesBySlugArgs): Promise<ListIssueTypesBySlugResult> =>
+      ipcRenderer.invoke('gh:listIssueTypesBySlug', args),
+    updateIssueTypeBySlug: (
+      args: UpdateIssueTypeBySlugArgs
+    ): Promise<GitHubProjectMutationResult> =>
+      ipcRenderer.invoke('gh:updateIssueTypeBySlug', args)
   },
 
   linear: {
