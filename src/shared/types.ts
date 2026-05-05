@@ -949,6 +949,7 @@ export type ClaudeRateLimitAccountsState = {
 export type TuiAgent =
   | 'claude' // Claude Code
   | 'codex' // OpenAI Codex
+  | 'autohand' // Autohand Code CLI
   | 'opencode' // OpenCode
   | 'pi' // Pi (pi.dev)
   | 'gemini' // Gemini CLI
