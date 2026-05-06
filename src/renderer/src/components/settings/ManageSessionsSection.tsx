@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { SearchableSetting } from './SearchableSetting'
 import { useAppStore } from '../../store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
+import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
 import { useDaemonActions, DaemonActionDialog } from '../shared/useDaemonActions'
 
 type ConfirmKind = 'killOne'
@@ -121,7 +122,6 @@ export function ManageSessionsSection(): React.JSX.Element {
   // entry points can't drift on what "go to this session" means.
   const tabsByWorktree = useAppStore((s) => s.tabsByWorktree)
   const ptyIdsByTabId = useAppStore((s) => s.ptyIdsByTabId)
-  const setActiveTab = useAppStore((s) => s.setActiveTab)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const closeSettingsPage = useAppStore((s) => s.closeSettingsPage)
 
@@ -151,17 +151,20 @@ export function ManageSessionsSection(): React.JSX.Element {
       if (worktreeId) {
         // Why: match SessionsStatusSegment — route through the shared
         // activation path before switching tab so the worktree container
-        // is mounted by the time setActiveTab runs.
+        // is mounted by the time activateTabAndFocusPane runs.
         activateAndRevealWorktree(worktreeId)
       }
       setActiveView('terminal')
-      setActiveTab(tabId)
+      // Why: rows here only carry ptyId, and there's no selector that maps
+      // ptyId → numeric paneId for an unmounted tab. Pass null so the helper
+      // degrades to tab-only activation (no worse than prior behavior).
+      activateTabAndFocusPane(tabId, null)
       // Why: the status-bar version doesn't need this because it's already
       // rendered over the terminal surface; from the Settings pane the user
       // would otherwise land on their pane with the modal still covering it.
       closeSettingsPage()
     },
-    [tabIdToWorktreeId, setActiveView, setActiveTab, closeSettingsPage]
+    [tabIdToWorktreeId, setActiveView, closeSettingsPage]
   )
 
   useEffect(() => {
