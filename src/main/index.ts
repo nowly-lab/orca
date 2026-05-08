@@ -614,7 +614,15 @@ app.whenReady().then(async () => {
   // dialog either doesn't appear or gets immediately covered by the maximized
   // window, making it impossible for the user to click "Allow".
   win.once('show', () => {
-    triggerStartupNotificationRegistration(store!)
+    // Why: store can be null if init failed earlier; bail rather than risk a
+    // throw inside an Electron event listener.
+    if (!store) {
+      return
+    }
+    const onboarding = store.getOnboarding()
+    if (onboarding.closedAt !== null) {
+      triggerStartupNotificationRegistration(store)
+    }
   })
 
   app.on('activate', () => {
