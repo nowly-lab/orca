@@ -531,11 +531,19 @@ app.whenReady().then(async () => {
   // assign a random available port per instance while still exercising the
   // full WebSocket startup path.
   const isE2E = Boolean(process.env.ORCA_E2E_USER_DATA_DIR)
+  // Why: a developer running `pnpm dev` while the packaged Orca is also open
+  // would otherwise race the packaged app for 6768 and silently fall back to
+  // a random OS-assigned port — breaking deterministic mobile pairing/repro
+  // scripts against the dev instance. Pin the first dev instance to 6769 so
+  // ws://127.0.0.1:6769 is stable; a second dev instance still falls back via
+  // ws-transport's EADDRINUSE handler.
+  const devWsPort = is.dev && !isE2E ? 6769 : undefined
   runtimeRpc = new OrcaRuntimeRpcServer({
     runtime,
     userDataPath: app.getPath('userData'),
     enableWebSocket: true,
-    ...(isE2E ? { wsPort: 0 } : {})
+    ...(isE2E ? { wsPort: 0 } : {}),
+    ...(devWsPort !== undefined ? { wsPort: devWsPort } : {})
   })
   registerMobileHandlers(runtimeRpc)
 
