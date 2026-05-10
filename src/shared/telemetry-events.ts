@@ -15,6 +15,7 @@
 
 import { z } from 'zod'
 
+import { AGENT_HOOK_TARGETS } from './agent-hook-types'
 import { ONBOARDING_FINAL_STEP } from './constants'
 import type { DiscoveryStatusEmitted, GlobalSettings, OnboardingChecklistState } from './types'
 
@@ -250,6 +251,27 @@ const workspaceCreateFailedSchema = z
   })
   .strict()
 
+// Managed-hook installer per-agent label. Distinct from `AGENT_KIND_VALUES`:
+// hook installation only targets these four agents and the labels here match
+// the `*HookService.install()` call sites in `src/main/index.ts`. `claude`
+// (not `claude-code`) is intentional — the failure is about Claude Code's
+// `~/.claude/settings.json`, not the broader product taxonomy. Sourced from
+// `AGENT_HOOK_TARGETS` so the wire enum and the IPC `AgentHookTarget` type
+// cannot drift if a fifth hook-install agent is added.
+export const hookInstallAgentSchema = z.enum(AGENT_HOOK_TARGETS)
+export type HookInstallAgent = z.infer<typeof hookInstallAgentSchema>
+
+// Why: install failures are config-file-shape errors (malformed JSON, missing
+// keys, ACL denials on `~/.claude` etc.) — not user content. The 200-char
+// cap is the truncation contract; callers must truncate before calling
+// `track`, and the validator will drop overlength strings via `.max(200)`.
+const agentHookInstallFailedSchema = z
+  .object({
+    agent: hookInstallAgentSchema,
+    error_message: z.string().max(200)
+  })
+  .strict()
+
 // ── Onboarding ──────────────────────────────────────────────────────────
 //
 // Closed enums only — no raw paths, repo names, clone URLs, or error
@@ -461,6 +483,7 @@ export const eventSchemas = {
 
   agent_started: agentStartedSchema,
   agent_error: agentErrorSchema,
+  agent_hook_install_failed: agentHookInstallFailedSchema,
 
   settings_changed: settingsChangedSchema,
 
@@ -528,12 +551,11 @@ type _CohortExtendedRoster =
 type _DerivedCohortExtendedEvents = {
   [N in EventName]: 'nth_repo_added' extends keyof EventMap[N] ? N : never
 }[EventName]
-type _CohortExtendedRosterSync =
-  _CohortExtendedRoster extends _DerivedCohortExtendedEvents
-    ? _DerivedCohortExtendedEvents extends _CohortExtendedRoster
-      ? true
-      : never
+type _CohortExtendedRosterSync = _CohortExtendedRoster extends _DerivedCohortExtendedEvents
+  ? _DerivedCohortExtendedEvents extends _CohortExtendedRoster
+    ? true
     : never
+  : never
 const _cohortExtendedRosterSyncCheck: _CohortExtendedRosterSync = true
 void _cohortExtendedRosterSyncCheck
 
@@ -577,12 +599,11 @@ type _OnboardingCohortRoster =
 type _DerivedOnboardingCohortEvents = {
   [N in EventName]: 'cohort' extends keyof EventMap[N] ? N : never
 }[EventName]
-type _OnboardingCohortRosterSync =
-  _OnboardingCohortRoster extends _DerivedOnboardingCohortEvents
-    ? _DerivedOnboardingCohortEvents extends _OnboardingCohortRoster
-      ? true
-      : never
+type _OnboardingCohortRosterSync = _OnboardingCohortRoster extends _DerivedOnboardingCohortEvents
+  ? _DerivedOnboardingCohortEvents extends _OnboardingCohortRoster
+    ? true
     : never
+  : never
 const _onboardingCohortRosterSyncCheck: _OnboardingCohortRosterSync = true
 void _onboardingCohortRosterSyncCheck
 
