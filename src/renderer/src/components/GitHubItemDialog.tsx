@@ -2320,7 +2320,7 @@ function GHCommentComposer({
     } finally {
       setSubmitting(false)
     }
-  }, [autoGrow, body, repoPath, issueNumber, onCommentAdded])
+  }, [autoGrow, body, repoPath, issueNumber, itemType, onCommentAdded])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -2523,16 +2523,29 @@ export default function GitHubItemDialog({
     )
   )
 
+  // Why: bumped by appendOptimisticComment on cold open (no cached details
+  // yet) so the details memo re-runs and surfaces the optimistic comment via
+  // the loading-shell fallback. Without this, the comment would sit in the
+  // ref alone and not render until the in-flight fetch lands. The cache
+  // notify path handles the warm case.
+  const [optimisticTick, setOptimisticTick] = useState(0)
+
   // Why: merge optimistic comments into the cached details. Keyed off
   // cachedEntry identity (stable) rather than the optimistic ref array (a
   // fresh array each render) to avoid unnecessary recomputation. Cache
   // notifications after optimistic writes will re-render this anyway.
   const details = useMemo<GitHubWorkItemDetails | null>(() => {
     const cachedDetails = cachedEntry?.details ?? null
+    const opt = optimisticCommentsRef.current
     if (!cachedDetails) {
+      // Why: details may still be loading on a cold open — surface optimistic
+      // comments via a minimal shell so a comment posted before the fetch
+      // resolves isn't held invisibly in ref-land.
+      if (opt.length > 0 && workItem) {
+        return { item: workItem, body: '', comments: [...opt] }
+      }
       return null
     }
-    const opt = optimisticCommentsRef.current
     if (opt.length === 0) {
       return cachedDetails
     }
@@ -2542,7 +2555,13 @@ export default function GitHubItemDialog({
       return cachedDetails
     }
     return { ...cachedDetails, comments: [...cachedDetails.comments, ...missing] }
-  }, [cachedEntry])
+    // Why: optimisticTick is the rerender signal for cold-open writes — the
+    // memo reads optimisticCommentsRef.current (a ref, no subscription), so
+    // bumping the tick is what forces this memo to re-run. The lint flags it
+    // as "unnecessary" because it's not referenced in the body, but removing
+    // it would silently break the cold-open optimistic-shell path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cachedEntry, workItem, optimisticTick])
 
   const loading = !!cachedEntry?.pending && !cachedEntry?.details
   const error = cachedEntry?.error && !cachedEntry?.details ? cachedEntry.error : null
@@ -2677,12 +2696,15 @@ export default function GitHubItemDialog({
               fetchedAt: 0,
               error: undefined
             })
+            return
           }
         }
-        // Why: when the cache has no details yet (still loading), the
-        // optimistic comment is held only in optimisticCommentsRef and will
-        // be merged once the in-flight fetch lands and writes details.
       }
+      // Why: when the cache has no details yet (still loading), no cache
+      // write/notify fires above. Bump local state so the details memo
+      // re-runs and surfaces the optimistic comment via the loading-shell
+      // fallback instead of holding it invisibly in the ref.
+      setOptimisticTick((n) => n + 1)
     },
     [detailsCacheKey]
   )
