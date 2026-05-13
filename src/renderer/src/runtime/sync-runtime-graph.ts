@@ -93,45 +93,95 @@ export function scheduleRuntimeGraphSync(): void {
   })
 }
 
-export function getRuntimeMobileSessionSyncKey(state: AppState): string {
-  return JSON.stringify({
-    tabsByWorktree: Object.fromEntries(
-      Object.entries(state.tabsByWorktree).map(([worktreeId, tabs]) => [
-        worktreeId,
-        tabs.map((tab) => ({
-          id: tab.id,
-          title: tab.title,
-          customTitle: tab.customTitle,
-          active: state.activeTabId === tab.id
-        }))
-      ])
-    ),
+export type RuntimeMobileSessionSyncKey = {
+  // Why: large maps the renderer never reshapes are compared by reference.
+  // Reallocating `terminalLayoutsByTabId` / `runtimePaneTitlesByTabId` is the
+  // signal that some pane layout or pane title actually changed; nothing else
+  // in the store rewrites those references. Comparing references avoids
+  // stringifying potentially thousands of accumulated tab entries on every
+  // `setActivePane` / `updateTabTitle` mutation. See
+  // docs/agent-working-pane-typing-lag.md.
+  terminalLayoutsByTabId: AppState['terminalLayoutsByTabId']
+  runtimePaneTitlesByTabId: AppState['runtimePaneTitlesByTabId']
+  groupsByWorktree: AppState['groupsByWorktree']
+  activeGroupIdByWorktree: AppState['activeGroupIdByWorktree']
+  unifiedTabsByWorktree: AppState['unifiedTabsByWorktree']
+  tabBarOrderByWorktree: AppState['tabBarOrderByWorktree']
+  activeFileId: AppState['activeFileId']
+  activeFileIdByWorktree: AppState['activeFileIdByWorktree']
+  // Why: these projections still need value-level inspection because the
+  // underlying references churn even when the mobile-relevant shape is
+  // unchanged (`tabsByWorktree` reallocates on every OSC title frame; the
+  // active-tab marker depends on `activeTabId`). Pre-serialize them once.
+  tabsProjection: string
+  openFilesProjection: string
+  editorDraftsProjection: string
+}
+
+export function getRuntimeMobileSessionSyncKey(state: AppState): RuntimeMobileSessionSyncKey {
+  return {
+    terminalLayoutsByTabId: state.terminalLayoutsByTabId,
+    runtimePaneTitlesByTabId: state.runtimePaneTitlesByTabId,
     groupsByWorktree: state.groupsByWorktree,
     activeGroupIdByWorktree: state.activeGroupIdByWorktree,
     unifiedTabsByWorktree: state.unifiedTabsByWorktree,
     tabBarOrderByWorktree: state.tabBarOrderByWorktree,
     activeFileId: state.activeFileId,
     activeFileIdByWorktree: state.activeFileIdByWorktree,
-    terminalLayoutsByTabId: state.terminalLayoutsByTabId,
-    runtimePaneTitlesByTabId: state.runtimePaneTitlesByTabId,
-    openFiles: state.openFiles.map((file) => ({
-      id: file.id,
-      filePath: file.filePath,
-      relativePath: file.relativePath,
-      worktreeId: file.worktreeId,
-      language: file.language,
-      mode: file.mode,
-      isDirty: file.isDirty,
-      isUntitled: file.isUntitled,
-      markdownPreviewSourceFileId: file.markdownPreviewSourceFileId
-    })),
-    editorDrafts: Object.fromEntries(
-      Object.entries(state.editorDrafts).map(([fileId, content]) => [
-        fileId,
-        stableHashString(content)
-      ])
+    tabsProjection: JSON.stringify(
+      Object.fromEntries(
+        Object.entries(state.tabsByWorktree).map(([worktreeId, tabs]) => [
+          worktreeId,
+          tabs.map((tab) => ({
+            id: tab.id,
+            title: tab.title,
+            customTitle: tab.customTitle,
+            active: state.activeTabId === tab.id
+          }))
+        ])
+      )
+    ),
+    openFilesProjection: JSON.stringify(
+      state.openFiles.map((file) => ({
+        id: file.id,
+        filePath: file.filePath,
+        relativePath: file.relativePath,
+        worktreeId: file.worktreeId,
+        language: file.language,
+        mode: file.mode,
+        isDirty: file.isDirty,
+        isUntitled: file.isUntitled,
+        markdownPreviewSourceFileId: file.markdownPreviewSourceFileId
+      }))
+    ),
+    editorDraftsProjection: JSON.stringify(
+      Object.fromEntries(
+        Object.entries(state.editorDrafts).map(([fileId, content]) => [
+          fileId,
+          stableHashString(content)
+        ])
+      )
     )
-  })
+  }
+}
+
+export function runtimeMobileSessionSyncKeysEqual(
+  a: RuntimeMobileSessionSyncKey,
+  b: RuntimeMobileSessionSyncKey
+): boolean {
+  return (
+    a.terminalLayoutsByTabId === b.terminalLayoutsByTabId &&
+    a.runtimePaneTitlesByTabId === b.runtimePaneTitlesByTabId &&
+    a.groupsByWorktree === b.groupsByWorktree &&
+    a.activeGroupIdByWorktree === b.activeGroupIdByWorktree &&
+    a.unifiedTabsByWorktree === b.unifiedTabsByWorktree &&
+    a.tabBarOrderByWorktree === b.tabBarOrderByWorktree &&
+    a.activeFileId === b.activeFileId &&
+    a.activeFileIdByWorktree === b.activeFileIdByWorktree &&
+    a.tabsProjection === b.tabsProjection &&
+    a.openFilesProjection === b.openFilesProjection &&
+    a.editorDraftsProjection === b.editorDraftsProjection
+  )
 }
 
 async function syncRuntimeGraph(): Promise<void> {

@@ -49,6 +49,7 @@ import { useAutoAckViewedAgent } from './hooks/useAutoAckViewedAgent'
 import { useUnreadDockBadge } from './hooks/useUnreadDockBadge'
 import {
   getRuntimeMobileSessionSyncKey,
+  runtimeMobileSessionSyncKeysEqual,
   scheduleRuntimeGraphSync,
   setRuntimeGraphStoreStateGetter,
   setRuntimeGraphSyncEnabled
@@ -435,6 +436,11 @@ function App(): React.JSX.Element {
   useEffect(() => {
     let previousKey = getRuntimeMobileSessionSyncKey(useAppStore.getState())
     return useAppStore.subscribe((state, previousState) => {
+      // Why: skip the key build entirely when no input field has changed by
+      // reference. Mirrors every field used by getRuntimeMobileSessionSyncKey
+      // so this gate stays a strict superset of "could the key have changed?"
+      // — if any field's reference is unchanged, neither the projection
+      // serialized from it nor the reference-compared map can have changed.
       if (
         state.tabsByWorktree === previousState.tabsByWorktree &&
         state.groupsByWorktree === previousState.groupsByWorktree &&
@@ -445,12 +451,14 @@ function App(): React.JSX.Element {
         state.activeFileIdByWorktree === previousState.activeFileIdByWorktree &&
         state.openFiles === previousState.openFiles &&
         state.editorDrafts === previousState.editorDrafts &&
-        state.activeTabId === previousState.activeTabId
+        state.activeTabId === previousState.activeTabId &&
+        state.terminalLayoutsByTabId === previousState.terminalLayoutsByTabId &&
+        state.runtimePaneTitlesByTabId === previousState.runtimePaneTitlesByTabId
       ) {
         return
       }
       const nextKey = getRuntimeMobileSessionSyncKey(state)
-      if (nextKey === previousKey) {
+      if (runtimeMobileSessionSyncKeysEqual(nextKey, previousKey)) {
         return
       }
       previousKey = nextKey
