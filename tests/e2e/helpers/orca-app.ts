@@ -25,6 +25,7 @@ import { execSync } from 'child_process'
 import os from 'os'
 import path from 'path'
 import { TEST_REPO_PATH_FILE } from '../global-setup'
+import { cleanupE2EDaemons, closeElectronAppForE2E } from './electron-process-shutdown'
 
 type OrcaTestFixtures = {
   electronApp: ElectronApplication
@@ -219,27 +220,10 @@ export const test = base.extend<OrcaTestFixtures, OrcaWorkerFixtures>({
       }
     })
     await provideFixture(app)
-    // Why: Electron's graceful shutdown runs before-quit/will-quit handlers,
-    // cleans up PTY child processes, and flushes session state to disk. Give
-    // it 10s for a clean exit, then SIGKILL the process tree immediately.
-    // SIGTERM doesn't reliably stop the Electron process tree on macOS.
-    const appProcess = app.process()
-    try {
-      await Promise.race([
-        app.close(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Timed out closing Electron app')), 10_000)
-        })
-      ])
-    } catch {
-      if (appProcess) {
-        try {
-          appProcess.kill('SIGKILL')
-        } catch {
-          /* already dead */
-        }
-      }
-    }
+    // Why: the Playwright close promise can settle before all Electron and PTY
+    // descendants are gone in CI; worker teardown then hangs on open handles.
+    await closeElectronAppForE2E(app)
+    await cleanupE2EDaemons(userDataDir)
     rmSync(userDataDir, { recursive: true, force: true })
   },
 

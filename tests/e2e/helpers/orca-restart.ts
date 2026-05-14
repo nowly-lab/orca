@@ -19,6 +19,7 @@ import { execSync } from 'child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import os from 'os'
 import path from 'path'
+import { cleanupE2EDaemons, closeElectronAppForE2E } from './electron-process-shutdown'
 
 type LaunchedOrca = {
   app: ElectronApplication
@@ -31,7 +32,7 @@ type RestartSession = {
   /** Gracefully close a launch, letting beforeunload flush session state. */
   close: (app: ElectronApplication) => Promise<void>
   /** Remove the shared userDataDir after the test is done. */
-  dispose: () => void
+  dispose: () => Promise<void>
 }
 
 function shouldLaunchHeadful(testInfo: TestInfo): boolean {
@@ -98,29 +99,11 @@ export function createRestartSession(testInfo: TestInfo): RestartSession {
   }
 
   const close = async (app: ElectronApplication): Promise<void> => {
-    // Why: mirror the shared fixture's shutdown race — give Electron 10s to run
-    // before-quit/will-quit (which drives the beforeunload → session.setSync
-    // flush this suite relies on) and only then fall back to SIGKILL.
-    const proc = app.process()
-    try {
-      await Promise.race([
-        app.close(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Timed out closing Electron app')), 10_000)
-        })
-      ])
-    } catch {
-      if (proc) {
-        try {
-          proc.kill('SIGKILL')
-        } catch {
-          /* already dead */
-        }
-      }
-    }
+    await closeElectronAppForE2E(app)
   }
 
-  const dispose = (): void => {
+  const dispose = async (): Promise<void> => {
+    await cleanupE2EDaemons(userDataDir)
     if (existsSync(userDataDir)) {
       rmSync(userDataDir, { recursive: true, force: true })
     }
