@@ -104,6 +104,9 @@ export function bootstrapShellPage(options: ShellPageBootstrapOptions): void {
     target.dataset[PAGE_SESSION_ID_KEY] = session.sessionId
     target.dataset[PAGE_BUILD_ID_KEY] = session.buildId
     if (session.route === null) {
+      // Terminal, and correctly so. A shell that names no screen is one built before `init` carried
+      // a route, and it will not learn one: a later `init` from that same shell names no screen
+      // either. Waiting for one would leave a blank document behind a panel nobody replaces.
       stampPageMountState(target, 'shell-too-old')
       refuseUnroutedShell()
       return true

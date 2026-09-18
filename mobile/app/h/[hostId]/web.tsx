@@ -36,10 +36,14 @@ export default function MobileWebShellRoute() {
   // The fallback is a redirect rather than the native screen: this route exists only to open the
   // page deliberately, so a bundle that does not list the worktree list has nothing to show here
   // and the host route is where the list actually lives.
+  //
+  // Encoded, not interpolated raw: `hostId` arrives decoded from the URL, so one carrying `?`, `#`
+  // or whitespace would build a pathname the page refuses and never mount anything. The page
+  // decodes it back when it matches `[hostId]`, so the screen it opens is the same one.
   return (
     <MobileWebShellScreen
       hostId={hostId}
-      route={{ pathname: `/h/${hostId}` }}
+      route={{ pathname: `/h/${encodeURIComponent(hostId)}` }}
       fallback={<Redirect href={`/h/${hostId}`} />}
     />
   )

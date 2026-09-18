@@ -24,6 +24,8 @@ export type Harness = {
   diagnostics: BridgeHostDiagnostic[]
   navigations: string[]
   storageWrites: { key: string; value: string | null }[]
+  pageReadyCount: () => number
+  routeRefusals: string[]
   pageFaults: BridgeErrorCapture[]
   frames: () => BridgeHostMessage[]
   last: () => BridgeHostMessage
@@ -48,6 +50,8 @@ export function harness(
   const diagnostics: BridgeHostDiagnostic[] = []
   const navigations: string[] = []
   const storageWrites: { key: string; value: string | null }[] = []
+  let pageReadies = 0
+  const routeRefusals: string[] = []
   const pageFaults: BridgeErrorCapture[] = []
   const host = createBridgeHost({
     client,
@@ -62,6 +66,10 @@ export function harness(
     host: HOST,
     storage: options.storage ?? {},
     onStorageWrite: (key, value) => storageWrites.push({ key, value }),
+    onPageReady: () => {
+      pageReadies += 1
+    },
+    onRouteRefused: (issue) => routeRefusals.push(issue),
     onNavigate: options.onNavigate ?? ((href) => navigations.push(href)),
     onPageFault: (error) => {
       pageFaults.push(error)
@@ -86,6 +94,8 @@ export function harness(
     diagnostics,
     navigations,
     storageWrites,
+    pageReadyCount: () => pageReadies,
+    routeRefusals,
     pageFaults,
     frames,
     last: () => {

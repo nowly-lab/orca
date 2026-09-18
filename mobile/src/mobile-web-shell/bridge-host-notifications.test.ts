@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { ID, harness } from './bridge-host-test-harness'
 import { clientFrame, createFakeRpcClient, flushBridge } from './bridge-host-test-fakes'
 import { BRIDGE_FAULT_GRANT } from './bridge/bridge-envelope'
+import { BRIDGE_NATIVE_GRANTS } from './bridge/bridge-init-frame'
 
 describe('notifications, refusals and the fence', () => {
   it('forwards foreground with the arity the page used, and the viewport whole', () => {
     const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground', reason: 'app-resume' }))
     bridge.host.receive(
@@ -17,6 +19,7 @@ describe('notifications, refusals and the fence', () => {
 
   it('hands a page fault to the session and asks the client for nothing', () => {
     const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(
       clientFrame({
         type: 'notify',
@@ -29,6 +32,42 @@ describe('notifications, refusals and the fence', () => {
     ])
     expect(bridge.client.requests).toHaveLength(0)
     expect(bridge.client.foregroundCalls).toEqual([])
+    expect(bridge.diagnostics).toEqual([])
+  })
+
+  it('refuses a notify from a page it has told nothing, grant or no grant', () => {
+    const bridge = harness()
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
+    expect(bridge.pageFaults).toEqual([])
+    expect(bridge.client.foregroundCalls).toEqual([])
+    expect(bridge.diagnostics).toEqual([
+      { kind: 'notify-refused', name: BRIDGE_FAULT_GRANT, why: 'before-ready' },
+      { kind: 'notify-refused', name: 'foreground', why: 'before-ready' }
+    ])
+  })
+
+  it('serves the grant it issued once the page has asked for a session', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    const init = bridge.last()
+    // The list on the wire is the list the check above reads; a host that offered one and enforced
+    // another would pass every other test in this file.
+    expect(init.type === 'init' && init.grants.native).toEqual(BRIDGE_NATIVE_GRANTS)
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(bridge.pageFaults).toHaveLength(1)
     expect(bridge.diagnostics).toEqual([])
   })
 
@@ -58,6 +97,7 @@ describe('notifications, refusals and the fence', () => {
       name: BRIDGE_FAULT_GRANT,
       error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
     })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     // The page's frame arrives on a native event handler, and a throw that escapes this arm takes
     // that handler down with it.
     bridge.host.receive(fault)
@@ -92,6 +132,7 @@ describe('notifications, refusals and the fence', () => {
         }
       }
     })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     // The page's frame arrives on a native event handler, and a throw that escapes this arm takes
     // that handler down with it.
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))

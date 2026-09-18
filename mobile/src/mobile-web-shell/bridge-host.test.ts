@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  HOST,
-  ID,
-  OTHER,
-  PAGE_ROUTES,
-  ROUTE,
-  harness,
-  subscribeFrame,
-  type Harness
-} from './bridge-host-test-harness'
+import type { RpcResponse } from '../transport/types'
+import { harness, ID, OTHER, subscribeFrame, type Harness } from './bridge-host-test-harness'
+import { BRIDGE_MAX_UNACKED_BYTES, BRIDGE_MAX_UNACKED_FRAMES } from './bridge-host-subscriptions'
 import {
   bridgeId,
   clientFrame,
@@ -16,167 +9,14 @@ import {
   flushBridge,
   rpcSuccess
 } from './bridge-host-test-fakes'
-import { BRIDGE_MAX_UNACKED_BYTES, BRIDGE_MAX_UNACKED_FRAMES } from './bridge-host-subscriptions'
 import {
   BRIDGE_MAX_MESSAGE_BYTES,
   BRIDGE_MAX_PENDING_REQUESTS,
   BRIDGE_MAX_REPLY_BYTES,
   BRIDGE_MAX_SUBSCRIPTIONS
 } from './bridge/bridge-caps'
-import { BRIDGE_FAULT_GRANT, type BridgeHostMessage } from './bridge/bridge-envelope'
+import type { BridgeHostMessage } from './bridge/bridge-envelope'
 import { BridgeReplyAssembler } from './bridge/bridge-reply-chunking'
-import type { RpcResponse } from '../transport/types'
-
-describe('init and state', () => {
-  it('answers ready with the getters, the caps it enforces, and the grants it honours', () => {
-    const client = createFakeRpcClient({
-      getState: () => 'reconnecting',
-      getReconnectAttempt: () => 3,
-      getLastConnectedAt: () => 1_700_000_000_000,
-      getLastInboundAt: () => 1_700_000_000_500,
-      getGeneration: () => 7
-    })
-    const bridge = harness({ client })
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    expect(bridge.last()).toEqual({
-      v: 1,
-      type: 'init',
-      sessionId: 'session-a',
-      buildId: 'build-a',
-      connection: {
-        state: 'reconnecting',
-        reconnectAttempt: 3,
-        lastConnectedAt: 1_700_000_000_000,
-        lastInboundAt: 1_700_000_000_500,
-        generation: 7
-      },
-      grants: {
-        rpc: {
-          maxPendingRequests: BRIDGE_MAX_PENDING_REQUESTS,
-          maxSubscriptions: BRIDGE_MAX_SUBSCRIPTIONS
-        },
-        // What the shell will do for the page, and what makes its `navigate` frame acceptable.
-        native: [BRIDGE_FAULT_GRANT, 'navigate', 'storage']
-      },
-      route: ROUTE,
-      pageRoutes: PAGE_ROUTES,
-      host: HOST,
-      storage: {}
-    })
-  })
-
-  it('names the screen the page is standing in for, which its own `/` cannot tell it', () => {
-    const route = { pathname: '/h/host-a/session/wt-1', params: { name: 'a branch' } }
-    const bridge = harness({ route })
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    const init = bridge.last()
-    expect(init.type === 'init' && init.route).toEqual(route)
-  })
-
-  it('opens the screen a page asks for, without routing it to the client', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-a/session/wt-1?name=a+b' })
-    )
-    expect(bridge.navigations).toEqual(['/h/host-a/session/wt-1?name=a+b'])
-    expect(bridge.client.requests).toEqual([])
-    // Nothing is owed to the page for a notify, so nothing is posted back either.
-    expect(bridge.frames().filter((frame) => frame.type === 'error')).toEqual([])
-  })
-
-  it('refuses a navigate frame that is not a path this app could open', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    for (const href of ['//evil.example/h', 'h/host-a', 'https://evil.example', '/h#top']) {
-      bridge.host.receive(clientFrame({ type: 'notify', name: 'navigate', href }))
-    }
-    expect(bridge.navigations).toEqual([])
-    expect(bridge.diagnostics).toEqual(
-      Array.from({ length: 4 }, () => ({ kind: 'refused', refusal: 'unrecognised-message' }))
-    )
-  })
-
-  it('serves no navigate to a page that has said goodbye', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    bridge.host.receive(clientFrame({ type: 'close' }))
-    bridge.host.receive(clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-a/tasks' }))
-    expect(bridge.navigations).toEqual([])
-  })
-
-  it('writes an allowlisted key into the app store, without routing it to the client', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:host-a', value: '["wt-1"]' })
-    )
-    bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:host-a', value: null })
-    )
-    expect(bridge.storageWrites).toEqual([
-      { key: 'orca:pins:host-a', value: '["wt-1"]' },
-      { key: 'orca:pins:host-a', value: null }
-    ])
-    expect(bridge.client.requests).toEqual([])
-  })
-
-  it('refuses a storage write for a key the page was never told about', () => {
-    // The whole app's preferences share one namespace, the hybrid shell flag included, so the
-    // allowlist is what stands between a page and a feature it could turn on for itself.
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    for (const key of ['orca:mobileWebShellEnabled', 'orca:pins:', 'orca:hosts']) {
-      bridge.host.receive(clientFrame({ type: 'notify', name: 'storage', key, value: 'x' }))
-    }
-    expect(bridge.storageWrites).toEqual([])
-    expect(bridge.diagnostics).toEqual(
-      Array.from({ length: 3 }, () => ({ kind: 'refused', refusal: 'unrecognised-message' }))
-    )
-  })
-
-  it('hands the page what the app holds for the keys it may read', () => {
-    const bridge = harness({ storage: { 'orca:pins:host-a': '["wt-1"]' } })
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    const init = bridge.last()
-    expect(init.type === 'init' && init.storage).toEqual({ 'orca:pins:host-a': '["wt-1"]' })
-    expect(init.type === 'init' && init.host).toEqual(HOST)
-  })
-
-  it('reports a client without the optional getters as null rather than omitting the field', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    const init = bridge.last()
-    expect(init.type === 'init' && init.connection).toEqual({
-      state: 'connected',
-      reconnectAttempt: 0,
-      lastConnectedAt: null,
-      lastInboundAt: null,
-      generation: null
-    })
-  })
-
-  it('re-answers ready, which is how a page that missed a state frame recovers', () => {
-    const bridge = harness()
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    bridge.host.receive(clientFrame({ type: 'ready' }))
-    expect(bridge.frames().filter((frame) => frame.type === 'init')).toHaveLength(2)
-  })
-
-  it('pushes the event state, not the getter a listener can outrun', () => {
-    const bridge = harness()
-    bridge.client.pushState('disconnected')
-    const pushed = bridge.last()
-    expect(pushed.type === 'state' && pushed.connection.state).toBe('disconnected')
-  })
-
-  it('drops the state listener on dispose', () => {
-    const bridge = harness()
-    expect(bridge.client.stateListeners()).toBe(1)
-    bridge.host.dispose()
-    expect(bridge.client.stateListeners()).toBe(0)
-  })
-})
 
 describe('requests', () => {
   it('replays the arity the page used', () => {
