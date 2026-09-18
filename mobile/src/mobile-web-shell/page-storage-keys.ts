@@ -50,7 +50,5 @@ export function pageStorageKeysForHost(hostId: string): string[] {
  * What the page may write is exactly what it was given, so this is that same list.
  */
 export function isPageStorageKeyForHost(key: string, hostId: string): boolean {
-  return (
-    key.length <= PAGE_STORAGE_MAX_KEY_CHARS && pageStorageKeysForHost(hostId).includes(key)
-  )
+  return key.length <= PAGE_STORAGE_MAX_KEY_CHARS && pageStorageKeysForHost(hostId).includes(key)
 }

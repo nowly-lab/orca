@@ -2,9 +2,15 @@ import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const doubles = vi.hoisted(() => ({
-  store: new Map<string, string>(),
-  writes: [] as { key: string; value: string | null }[],
+type Doubles = {
+  store: Map<string, string>
+  writes: { key: string; value: string | null }[]
+  hostsReject: boolean
+}
+
+const doubles = vi.hoisted((): Doubles => ({
+  store: new Map(),
+  writes: [],
   hostsReject: false
 }))
 

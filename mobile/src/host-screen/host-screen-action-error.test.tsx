@@ -3,7 +3,9 @@ import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
 
-const doubles = vi.hoisted(() => ({ removeRejects: true, alerts: [] as unknown[] }))
+type Doubles = { removeRejects: boolean; alerts: unknown[][] }
+
+const doubles = vi.hoisted((): Doubles => ({ removeRejects: true, alerts: [] }))
 
 vi.mock('react-native', () => ({
   Alert: {
@@ -26,6 +28,7 @@ vi.mock('../transport/host-removal-lifecycle', () => ({
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../host-route-exit', () => ({ leaveHostRoute: vi.fn() }))
 
+import { useRouter } from 'expo-router'
 import { HostScreenView } from './host-screen-view'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
 import type { HostScreenState } from './use-host-screen-state'
@@ -34,12 +37,16 @@ function byName(tree: ReactTestRenderer, name: string): ReactTestInstance[] {
   return tree.root.findAll((node) => String(node.type) === name)
 }
 
-/** Only the two fields the view reads before it decides whether to render the screen at all. */
+/**
+ * Only the two fields the view reads before it decides whether to render the screen at all.
+ *
+ * Everything below the early return is a child this file mocks away, so no other member of the
+ * controller is reachable from what these cases exercise.
+ */
 function controllerWith(fields: { error: string; actionError: string }) {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `HostScreenView`
-  // reads `state.error` and nothing else before it hands the controller to children this file
-  // mocks away, so the two fields below are the whole surface under test.
-  return { state: fields } as unknown as Parameters<typeof HostScreenView>[0]['controller']
+  const partial: unknown = { state: fields }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `HostScreenView` reads `state.error` and then hands the controller to three mocked children, so these two fields are the whole reachable surface.
+  return partial as Parameters<typeof HostScreenView>[0]['controller']
 }
 
 function render(fields: { error: string; actionError: string }): ReactTestRenderer {
@@ -76,6 +83,11 @@ describe('a removal that failed', () => {
       confirm: []
     }
     const held: { remove: (() => Promise<void>) | null } = { remove: null }
+    const partialState: unknown = {
+      setActionError: (value: string) => writes.action.push(value),
+      setError: (value: string) => writes.identity.push(value),
+      setConfirmRemoveHost: (value: boolean) => writes.confirm.push(value)
+    }
     function Probe(): null {
       const actions = useHostWorktreeActions({
         client: null,
@@ -85,14 +97,9 @@ describe('a removal that failed', () => {
         forgetHostClient: () => {},
         hostId: 'host-a',
         pathname: '/h/host-a',
-        router: { push: vi.fn(), replace: vi.fn() } as never,
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the removal
-        // path reads exactly these three setters; every other member would be unreachable from it.
-        state: {
-          setActionError: (value: string) => writes.action.push(value),
-          setError: (value: string) => writes.identity.push(value),
-          setConfirmRemoveHost: (value: boolean) => writes.confirm.push(value)
-        } as unknown as HostScreenState
+        router: useRouter(),
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the removal path reads exactly these three setters and `hostId`; no other member of the state is reachable from it.
+        state: partialState as HostScreenState
       })
       held.remove = actions.handleRemoveHost
       return null
