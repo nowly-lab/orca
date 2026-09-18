@@ -49,7 +49,10 @@ export default function MobileWebShellRoute() {
   // or whitespace would build a pathname the page refuses and never mount anything. The page
   // decodes it back when it matches `[hostId]`, so the screen it opens is the same one.
   return (
-    <MobileWebShellScreen hostId={hostId} route={{ pathname: `/h/${encodeURIComponent(hostId)}` }} />
+    <MobileWebShellScreen
+      hostId={hostId}
+      route={{ pathname: `/h/${encodeURIComponent(hostId)}` }}
+    />
   )
 }
 
