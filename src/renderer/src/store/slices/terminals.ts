@@ -1,3 +1,4 @@
+// ci-probe: throwaway no-op marker to route e2e specs. Do not merge.
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TerminalSlice } from '../terminals/terminal-state'
