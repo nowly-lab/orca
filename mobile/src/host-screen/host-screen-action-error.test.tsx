@@ -44,9 +44,8 @@ function byName(tree: ReactTestRenderer, name: string): ReactTestInstance[] {
  * controller is reachable from what these cases exercise.
  */
 function controllerWith(fields: { error: string; actionError: string }) {
-  const partial: unknown = { state: fields }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `HostScreenView` reads `state.error` and then hands the controller to three mocked children, so these two fields are the whole reachable surface.
-  return partial as Parameters<typeof HostScreenView>[0]['controller']
+  return { state: fields } as unknown as Parameters<typeof HostScreenView>[0]['controller']
 }
 
 function render(fields: { error: string; actionError: string }): ReactTestRenderer {
@@ -83,7 +82,7 @@ describe('a removal that failed', () => {
       confirm: []
     }
     const held: { remove: (() => Promise<void>) | null } = { remove: null }
-    const partialState: unknown = {
+    const partialState = {
       setActionError: (value: string) => writes.action.push(value),
       setError: (value: string) => writes.identity.push(value),
       setConfirmRemoveHost: (value: boolean) => writes.confirm.push(value)
@@ -99,7 +98,7 @@ describe('a removal that failed', () => {
         pathname: '/h/host-a',
         router: useRouter(),
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the removal path reads exactly these three setters and `hostId`; no other member of the state is reachable from it.
-        state: partialState as HostScreenState
+        state: partialState as unknown as HostScreenState
       })
       held.remove = actions.handleRemoveHost
       return null
