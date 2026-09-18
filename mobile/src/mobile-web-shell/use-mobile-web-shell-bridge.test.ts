@@ -417,7 +417,7 @@ describe('the callbacks a render passes', () => {
     const first: BridgeErrorCapture[] = []
     const second: BridgeErrorCapture[] = []
     const posted: PostedFrame[] = []
-    const probe: Probe = { view: null, navigations: [] }
+    const probe: Probe = { view: null, navigations: [], storageWrites: [] }
     // One session throughout, so the host is never rebuilt: only the ref refresh can carry the
     // second render's callback to a frame that arrives after it.
     const render = (faults: BridgeErrorCapture[]): ReactElement =>
