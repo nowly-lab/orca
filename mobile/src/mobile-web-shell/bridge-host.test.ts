@@ -34,6 +34,7 @@ type Harness = {
   posted: string[]
   diagnostics: BridgeHostDiagnostic[]
   pageFaults: BridgeErrorCapture[]
+  pageReadyCount: () => number
   frames: () => BridgeHostMessage[]
   last: () => BridgeHostMessage
 }
@@ -52,6 +53,7 @@ function harness(
   const posted: string[] = []
   const diagnostics: BridgeHostDiagnostic[] = []
   const pageFaults: BridgeErrorCapture[] = []
+  let pageReadies = 0
   const host = createBridgeHost({
     client,
     post: (json) => {
@@ -64,6 +66,9 @@ function harness(
     onPageFault: (error) => {
       pageFaults.push(error)
       options.onPageFault?.(error)
+    },
+    onPageReady: () => {
+      pageReadies += 1
     },
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic)
   })
@@ -83,6 +88,7 @@ function harness(
     posted,
     diagnostics,
     pageFaults,
+    pageReadyCount: () => pageReadies,
     frames,
     last: () => {
       const all = frames()
@@ -159,6 +165,22 @@ describe('init and state', () => {
     bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(clientFrame({ type: 'ready' }))
     expect(bridge.frames().filter((frame) => frame.type === 'init')).toHaveLength(2)
+  })
+
+  it('tells the shell the page spoke, on the first ask and on every re-ask', () => {
+    const bridge = harness()
+    expect(bridge.pageReadyCount()).toBe(0)
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    // The shell bounds the wait for the first of these; a page on its backoff must not have to
+    // land a particular one to end it.
+    expect(bridge.pageReadyCount()).toBe(2)
+  })
+
+  it('says nothing about a page that never asked, however much else it posts', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
+    expect(bridge.pageReadyCount()).toBe(0)
   })
 
   it('pushes the event state, not the getter a listener can outrun', () => {
@@ -673,6 +695,7 @@ describe('teardown', () => {
 describe('notifications, refusals and the fence', () => {
   it('forwards foreground with the arity the page used, and the viewport whole', () => {
     const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground', reason: 'app-resume' }))
     bridge.host.receive(
@@ -684,6 +707,7 @@ describe('notifications, refusals and the fence', () => {
 
   it('hands a page fault to the session and asks the client for nothing', () => {
     const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(
       clientFrame({
         type: 'notify',
@@ -696,6 +720,42 @@ describe('notifications, refusals and the fence', () => {
     ])
     expect(bridge.client.requests).toHaveLength(0)
     expect(bridge.client.foregroundCalls).toEqual([])
+    expect(bridge.diagnostics).toEqual([])
+  })
+
+  it('refuses a notify from a page it has told nothing, grant or no grant', () => {
+    const bridge = harness()
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
+    expect(bridge.pageFaults).toEqual([])
+    expect(bridge.client.foregroundCalls).toEqual([])
+    expect(bridge.diagnostics).toEqual([
+      { kind: 'notify-refused', name: BRIDGE_FAULT_GRANT, why: 'before-ready' },
+      { kind: 'notify-refused', name: 'foreground', why: 'before-ready' }
+    ])
+  })
+
+  it('serves the grant it issued once the page has asked for a session', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    const init = bridge.last()
+    // The list on the wire is the list the check above reads; a host that offered one and enforced
+    // another would pass every other test in this file.
+    expect(init.type === 'init' && init.grants.native).toEqual([BRIDGE_FAULT_GRANT])
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(bridge.pageFaults).toHaveLength(1)
     expect(bridge.diagnostics).toEqual([])
   })
 
@@ -725,6 +785,7 @@ describe('notifications, refusals and the fence', () => {
       name: BRIDGE_FAULT_GRANT,
       error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
     })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     // The page's frame arrives on a native event handler, and a throw that escapes this arm takes
     // that handler down with it.
     bridge.host.receive(fault)
@@ -759,6 +820,7 @@ describe('notifications, refusals and the fence', () => {
         }
       }
     })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
     // The page's frame arrives on a native event handler, and a throw that escapes this arm takes
     // that handler down with it.
     bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))

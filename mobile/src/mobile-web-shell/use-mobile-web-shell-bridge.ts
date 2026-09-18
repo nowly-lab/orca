@@ -87,6 +87,8 @@ export function useMobileWebShellBridge(args: {
   route: BridgeInitRoute
   /** The page could not render the generation on screen. Reported, never recovered from here. */
   onPageFault: (error: BridgeErrorCapture) => void
+  /** The page asked for a session. Reported so the screen can stop waiting for it. */
+  onPageReady: () => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -101,12 +103,14 @@ export function useMobileWebShellBridge(args: {
   // Read through a ref for the same reason: a caller's fresh closure every render must not tear a
   // host down and settle its pendings.
   const pageFaultRef = useRef(args.onPageFault)
+  const pageReadyRef = useRef(args.onPageReady)
   // Commit-phase and declared above the host's effect, so the host is built against what this
   // render passed: a native frame can land between a commit and a passive effect.
   useLayoutEffect(() => {
     routeRef.current = args.route
     pageFaultRef.current = args.onPageFault
-  }, [args.onPageFault, args.route])
+    pageReadyRef.current = args.onPageReady
+  }, [args.onPageFault, args.onPageReady, args.route])
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -121,6 +125,9 @@ export function useMobileWebShellBridge(args: {
       route: routeRef.current,
       onPageFault: (error) => {
         pageFaultRef.current(error)
+      },
+      onPageReady: () => {
+        pageReadyRef.current()
       },
       post: (json) => {
         const mounted = viewRef.current
