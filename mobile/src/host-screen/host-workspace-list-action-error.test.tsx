@@ -100,14 +100,14 @@ function texts(tree: ReactTestRenderer): unknown[] {
 }
 
 function dismiss(tree: ReactTestRenderer): ReactTestInstance {
-  const found = tree.root.findAll(
+  const [only, ...rest] = tree.root.findAll(
     (node) =>
       String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Dismiss notice'
   )
-  if (found.length !== 1) {
-    throw new Error(`expected one dismiss, found ${found.length}`)
+  if (only === undefined || rest.length > 0) {
+    throw new Error(`expected one dismiss, found ${rest.length + Number(only !== undefined)}`)
   }
-  return found[0] as ReactTestInstance
+  return only
 }
 
 describe('an action that did not happen', () => {
