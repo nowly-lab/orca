@@ -850,6 +850,22 @@ describe('the page has to speak for the document that loaded', () => {
     ])
   })
 
+  it('leaves a remounted document its own wait when the first one expires late', () => {
+    const first = run(readySession().session, { type: 'document-loaded' }, { type: 'page-ready' })
+    const armed = first.session.flow
+    const second = run(
+      first.session,
+      { type: 'shell-failed', reason: 'render-process-gone' },
+      { type: 'remounted', sessionId: 'session-two' },
+      { type: 'document-loaded' }
+    )
+    // The second document is inside its own wait and has not spoken yet, so the only thing that can
+    // keep the first document's expiry off it is the flow the remount started.
+    const step = run(second.session, { type: 'page-ready-deadline', flow: armed })
+    expect(step.effects).toEqual([])
+    expect(step.session.state).toMatchObject({ kind: 'ready', sessionId: 'session-two' })
+  })
+
   it('makes a freshly activated generation prove itself too', () => {
     const spoken = run(readySession().session, { type: 'page-ready' })
     const reactivated = run(spoken.session, {

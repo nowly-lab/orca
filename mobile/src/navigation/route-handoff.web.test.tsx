@@ -234,7 +234,14 @@ describe('a target the shell would refuse', () => {
   })
 
   it('falls through locally for an href the pattern refuses, instead of a tap that does nothing', () => {
-    for (const href of ['/h/host-a/tasks#top', '/h/host-a/../tasks', '/h/a\\b/tasks']) {
+    for (const href of [
+      '/h/host-a/tasks#top',
+      '/h/host-a/../tasks',
+      // The same climb the shell's reader refuses percent-encoded, which both sides get from the
+      // one segment rule they share.
+      '/h/host-a/%2e%2e/tasks',
+      '/h/a\\b/tasks'
+    ]) {
       router.push.mockClear()
       const { posted, handoff } = mount(INIT)
       handoff.push(href)

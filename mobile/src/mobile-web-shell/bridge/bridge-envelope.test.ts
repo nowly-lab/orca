@@ -16,7 +16,9 @@ import {
   BRIDGE_MAX_ROUTE_PARAMS,
   BRIDGE_MAX_ROUTE_PATHNAME_CHARS,
   BRIDGE_MAX_VIEWPORT_COLS,
-  BRIDGE_MAX_VIEWPORT_ROWS
+  BRIDGE_MAX_VIEWPORT_ROWS,
+  BRIDGE_ROUTE_HREF_PATTERN,
+  BRIDGE_ROUTE_PATHNAME_PATTERN
 } from './bridge-caps'
 import {
   BRIDGE_BINARY_FORMATS,
@@ -254,6 +256,20 @@ describe('host messages', () => {
         route: { pathname: '/h/a..b/...' }
       }
     ],
+    [
+      'an init whose segments merely carry percent escapes, which are text and not navigation',
+      {
+        type: 'init',
+        sessionId: 's1',
+        buildId: 'b1',
+        connection: CONNECTION,
+        grants: GRANTS,
+        // An encoded space, a segment that starts with an encoded dot, and an encoded slash, which
+        // the router reads as one segment's text. Without these the refusals above would pass a
+        // rule that banned the escape rather than the dot segment it spells.
+        route: { pathname: '/h/a%20b/%2ex/a%2fb' }
+      }
+    ],
     ['state', { type: 'state', connection: CONNECTION }],
     ['a whole reply', { type: 'reply', id: ID, payload: SUCCESS_PAYLOAD }],
     [
@@ -382,6 +398,18 @@ describe('host messages', () => {
     ['an init route ending in a dot segment', initRoute({ pathname: '/h/a/..' })],
     ['an init route with a single dot segment', initRoute({ pathname: '/h/./a' })],
     ['an init route with an interior backslash', initRoute({ pathname: '/h/a\\b' })],
+    // The same climb, spelled the way a URL parser still reads as a dot segment: it percent-decodes
+    // the path before it resolves it, so `%2e%2e` escapes the prefix exactly as `..` does.
+    [
+      'an init route that climbs out of its prefix percent-encoded',
+      initRoute({ pathname: '/h/%2e%2e/render-check-host' })
+    ],
+    [
+      'an init route that climbs out of its prefix in capitals',
+      initRoute({ pathname: '/h/%2E%2E/render-check-host' })
+    ],
+    ['an init route with a half-encoded dot segment', initRoute({ pathname: '/h/.%2e/a' })],
+    ['an init route with a single encoded dot segment', initRoute({ pathname: '/h/%2e/a' })],
     ['an init route with an empty interior segment', initRoute({ pathname: '/h//a' })],
     ['an init route with an empty pathname', initRoute({ pathname: '' })],
     [
@@ -591,5 +619,25 @@ describe('the readers bound their two directions differently', () => {
     })
     expect(raw.length).toBeGreaterThan(BRIDGE_MAX_MESSAGE_BYTES)
     expect(readBridgeHostMessage(raw)).toEqual({ ok: false, refusal: 'oversized' })
+  })
+})
+
+/**
+ * One rule, two patterns.
+ *
+ * The screen the shell names and the screen a page asks for are the same vocabulary, and a spelling
+ * one refuses while the other takes is a hole with a `notify` already pointed at it.
+ */
+describe('the segment rule both route patterns are built from', () => {
+  it('refuses a dot segment in either position, however it is spelled', () => {
+    for (const spelling of ['/h/../a', '/h/%2e%2e/a', '/h/%2E%2E/a', '/h/.%2e/a', '/h/%2e/a']) {
+      expect(BRIDGE_ROUTE_PATHNAME_PATTERN.test(spelling), spelling).toBe(false)
+      expect(BRIDGE_ROUTE_HREF_PATTERN.test(spelling), spelling).toBe(false)
+    }
+  })
+
+  it('takes an escape that is part of a name, in either position', () => {
+    expect(BRIDGE_ROUTE_PATHNAME_PATTERN.test('/h/a%20b/%2ex/a%2fb')).toBe(true)
+    expect(BRIDGE_ROUTE_HREF_PATTERN.test('/h/a%20b/%2ex?from=list')).toBe(true)
   })
 })

@@ -311,9 +311,12 @@ export function reduceMobileWebShellSession(
     case 'remounted':
       // Only the session id changes, so the view remounts against the same verified bytes. A new
       // key is a new document, so whatever the last one said is no longer evidence about this one.
+      // The flow goes with it: the wait the retired document armed would otherwise expire onto a
+      // healthy page that is still inside its own, and take a working workspace off screen.
       return session.state.kind === 'ready'
         ? step(session, {
             pageReady: false,
+            flow: session.flow + 1,
             state: { ...session.state, sessionId: event.sessionId }
           })
         : step(session, {})
