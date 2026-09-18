@@ -89,6 +89,7 @@ vi.mock('../transport/mobile-web-bundle-fetch', () => ({
     })
 }))
 
+import { BRIDGE_READY_RETRY_MAX_MS } from './bridge/bridge-client-init-handshake'
 import { PAGE_READY_DEADLINE_MS } from './mobile-web-shell-runtime'
 import { useMobileWebShellSession } from './use-mobile-web-shell-session'
 
@@ -421,6 +422,12 @@ describe('the wait for the page to speak', () => {
     expect(mounted.states().at(-1)?.kind).toBe('ready')
     return mounted
   }
+
+  it(`waits out several of the page's own asks before it gives up on one`, () => {
+    // The number the deadline is for: a page whose backoff has widened to the ceiling still gets
+    // several asks inside the wait, so a slow device is never mistaken for a page that never ran.
+    expect(PAGE_READY_DEADLINE_MS / BRIDGE_READY_RETRY_MAX_MS).toBe(5)
+  })
 
   it('fails the generation a finished document never spoke for, and asks to fetch it again', async () => {
     const mounted = await ready()
