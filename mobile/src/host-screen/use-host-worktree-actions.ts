@@ -155,7 +155,7 @@ export function useHostWorktreeActions(args: {
       // this failure had no surface at all. The list already has one, and it shows on both.
       setError('Could not remove host. Please try again.')
     }
-  }, [hostId, leaveHost, forgetHostClient, setError])
+  }, [hostId, leaveHost, forgetHostClient, setConfirmRemoveHost, setError])
 
   const navigateFromHostList = useCallback(
     (target: string) => {
