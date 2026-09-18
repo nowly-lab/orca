@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { mirrorPageStorageWrite } from '../mobile-web-shell/page-storage-mirror'
+import { noteMirroredWrite } from '../storage/mirrored-storage-keys'
 import { getRepoIdFromMobileWorktreeId } from '../session/mobile-session-route-helpers'
 
 export const LAST_VISITED_WORKTREE_STORAGE_KEY = 'orca:last-visited-worktree'
@@ -58,6 +58,6 @@ export function readLastVisitedWorktreeRepoId(raw: string | null, hostId: string
  */
 export function writeLastVisitedWorktree(record: LastVisitedWorktreeRecord): void {
   const value = JSON.stringify(record)
-  mirrorPageStorageWrite(LAST_VISITED_WORKTREE_STORAGE_KEY, value)
+  noteMirroredWrite(LAST_VISITED_WORKTREE_STORAGE_KEY, value)
   void AsyncStorage.setItem(LAST_VISITED_WORKTREE_STORAGE_KEY, value)
 }

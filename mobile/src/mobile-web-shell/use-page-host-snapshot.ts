@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadHosts } from '../transport/host-store'
 import type { BridgeInitHost } from './bridge/bridge-envelope'
-import { isPageStorageKeyForHost } from './page-storage-keys'
-import { hydratePageStorage, readPageStorageForHost, writePageStorage } from './page-storage-mirror'
+import {
+  hydrateMirroredStorage,
+  readMirroredStorage,
+  writeMirroredStorage
+} from '../storage/mirrored-storage-keys'
+import { isPageStorageKeyForHost, pageStorageKeysForHost } from './page-storage-keys'
 
 export type PageHostSnapshot = {
   host: BridgeInitHost
@@ -42,7 +46,12 @@ export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
   const [snapshot, setSnapshot] = useState<PageHostSnapshot | null>(null)
   const [unreadable, setUnreadable] = useState(false)
 
-  const refreshStorage = useCallback((): Promise<void> => hydratePageStorage(hostId), [hostId])
+  // The allowlist is the shell's, not the mirror's: what the page may be handed is named here on
+  // every read and every seat, so nothing else the app happens to mirror can reach it.
+  const refreshStorage = useCallback(
+    (): Promise<void> => hydrateMirroredStorage(pageStorageKeysForHost(hostId)),
+    [hostId]
+  )
 
   useEffect(() => {
     let stale = false
@@ -92,7 +101,7 @@ export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
       if (!isPageStorageKeyForHost(key, hostId)) {
         return
       }
-      writePageStorage(key, value)
+      writeMirroredStorage(key, value)
     },
     [hostId]
   )
@@ -100,7 +109,7 @@ export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
   return {
     snapshot,
     unreadable,
-    readStorage: useCallback(() => readPageStorageForHost(hostId), [hostId]),
+    readStorage: useCallback(() => readMirroredStorage(pageStorageKeysForHost(hostId)), [hostId]),
     refreshStorage,
     writeStorage
   }
