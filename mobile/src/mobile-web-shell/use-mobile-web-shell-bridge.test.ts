@@ -217,6 +217,8 @@ describe('the bridge channel', () => {
 
   it('hands a page fault to the screen and asks the client for nothing', async () => {
     const mounted = await mount(readyState('session-one'))
+    // The grant comes with the session, so the page asks for one before it reports anything.
+    await mounted.deliver(clientFrame({ type: 'ready' }))
     await mounted.deliver(
       clientFrame({
         type: 'notify',
@@ -234,6 +236,9 @@ describe('the bridge channel', () => {
     const mounted = await mount(readyState('session-one'))
     const stale = mounted.probe.view
     await mounted.update(readyState('session-two'))
+    // The live page asks first, so the host that hears the stale frame has issued its grants: what
+    // refuses the frame below is the session fence and not a page that had been told nothing.
+    await mounted.deliver(clientFrame({ type: 'ready' }))
     await act(async () => {
       stale?.onBridgeMessage({
         nativeEvent: {

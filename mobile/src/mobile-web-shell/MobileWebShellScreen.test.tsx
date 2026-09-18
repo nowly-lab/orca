@@ -281,6 +281,11 @@ describe('the hybrid shell screen', () => {
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const tree = await render(readyState('session-one'))
     await act(async () => {
+      // The page asks for its session first, which is what earns it the `fault` grant: a host that
+      // has told a page nothing refuses the name.
+      byName(tree, 'ShellViewProbe')[0].props.onBridgeMessage({
+        nativeEvent: { json: clientFrame({ type: 'ready' }) }
+      })
       byName(tree, 'ShellViewProbe')[0].props.onBridgeMessage({
         nativeEvent: {
           json: clientFrame({

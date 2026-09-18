@@ -21,6 +21,8 @@ import {
   type BridgeHostMessage
 } from './bridge/bridge-envelope'
 import { captureBridgeError, type BridgeErrorCapture } from './bridge/bridge-error-capture'
+import { BRIDGE_NATIVE_GRANTS, createBridgeInitFrame } from './bridge/bridge-init-frame'
+import { bridgeNotifyRefusal, type BridgeNotifyRefusal } from './bridge/bridge-notify-grants'
 import { splitBridgeReply } from './bridge/bridge-reply-chunking'
 
 type RequestMessage = Extract<BridgeClientMessage, { type: 'request' }>
@@ -44,6 +46,9 @@ export type BridgeHostDiagnostic =
   /** A frame that arrived between a page's `close` and the next document's `ready`. It belongs to
    *  the closed document, and serving it would answer into whatever loads in next. */
   | { kind: 'frame-after-close' }
+  /** A `notify` the host will not act on: a grant-gated name it never issued, or any name from a
+   *  page that has not asked for a session yet. Nothing is owed back, so it is logged and dropped. */
+  | { kind: 'notify-refused'; name: string; why: BridgeNotifyRefusal }
 
 export type BridgeHostOptions = {
   client: RpcClient
@@ -95,6 +100,10 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
   // No epoch rides along: one native listener delivers page frames in order, so a straggler from
   // the closed document is always behind it and ahead of the next document's `ready`.
   let serving = true
+  // Whether this host has ever answered a `ready`. Not the same as `serving`, which starts true so
+  // the first document's frames are not refused for arriving in the same batch as its `ready`: this
+  // one starts false, because a page that has been told no grants holds none.
+  let initSent = false
   let postFailureReported = false
   let notifyFailureReported = false
 
@@ -153,22 +162,8 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
   // Answered every time it is asked: a page that saw a `state` older than the one it holds recovers
   // by asking again rather than by living with a cache it knows is wrong.
   function sendInit(): void {
-    send({
-      v: BRIDGE_PROTOCOL_VERSION,
-      type: 'init',
-      sessionId,
-      buildId,
-      connection: snapshot(),
-      grants: {
-        rpc: {
-          maxPendingRequests: BRIDGE_MAX_PENDING_REQUESTS,
-          maxSubscriptions: BRIDGE_MAX_SUBSCRIPTIONS
-        },
-        // A name added here is never a version bump. `fault` is what lets the page post one, and
-        // it is offered to every page because it is the protocol's, not a screen's.
-        native: [BRIDGE_FAULT_GRANT]
-      }
-    })
+    initSent = true
+    send(createBridgeInitFrame({ sessionId, buildId, connection: snapshot() }))
   }
 
   function settle(id: string, record: PendingRequest): boolean {
@@ -267,6 +262,15 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
   /** The client's own work runs inside these calls, and a throw from one would otherwise escape into
    *  the native event handler that delivered the page's frame. Nothing is owed to the page here. */
   function forwardNotify(message: NotifyMessage): void {
+    const refusal = bridgeNotifyRefusal({
+      name: message.name,
+      initSent,
+      granted: BRIDGE_NATIVE_GRANTS
+    })
+    if (refusal !== null) {
+      options.onDiagnostic?.({ kind: 'notify-refused', name: message.name, why: refusal })
+      return
+    }
     try {
       if (message.name === BRIDGE_FAULT_GRANT) {
         // Not the client's: a page that threw is this session's problem, and the desktop on the
