@@ -121,7 +121,11 @@ export function useMobileWebShellBridge(args: {
   const storageWriteRef = useRef(args.onStorageWrite)
   storageWriteRef.current = args.onStorageWrite
   const pageFaultRef = useRef(args.onPageFault)
-  pageFaultRef.current = args.onPageFault
+  // Commit-phase and declared above the host's effect, so the host is built against the callback
+  // this render passed: a native frame can land between a commit and a passive effect.
+  useLayoutEffect(() => {
+    pageFaultRef.current = args.onPageFault
+  }, [args.onPageFault])
   const snapshot = args.snapshot
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
