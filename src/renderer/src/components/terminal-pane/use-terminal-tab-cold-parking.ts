@@ -1,3 +1,4 @@
+// ci-probe: throwaway no-op marker to route e2e specs. Do not merge.
 /**
  * Per-tab hidden-view parking for TerminalPaneOverlayLayer.
  *
