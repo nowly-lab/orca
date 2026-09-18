@@ -60,6 +60,12 @@ export type BridgeHostOptions = {
    * so the same bytes throw again, and the only thing left is for the shell to stop showing them.
    */
   onPageFault: (error: BridgeErrorCapture) => void
+  /**
+   * The page asked for a session, which is the only proof its bundle evaluated at all. Required for
+   * the same reason as the fault: the shell bounds the wait for it, and a host built without this
+   * would leave a document that never spoke looking exactly like one still starting up.
+   */
+  onPageReady: () => void
   onDiagnostic?: (diagnostic: BridgeHostDiagnostic) => void
 }
 
@@ -321,6 +327,9 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
     if (message.type === 'ready') {
       serving = true
       sendInit()
+      // Every time it is asked, not once: the page re-asks on a backoff, and the shell's wait ends
+      // on the first of those that lands rather than on a particular one.
+      options.onPageReady()
       return
     }
     if (!serving) {

@@ -75,6 +75,7 @@ function DeliverDuringCommit(props: {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  readies: string[]
 }): ReactElement {
   const { deliver, probe } = props
   useLayoutEffect(() => {
@@ -86,7 +87,8 @@ function DeliverDuringCommit(props: {
     session: readyState('session-one'),
     posted: props.posted,
     probe,
-    faults: props.faults
+    faults: props.faults,
+    readies: props.readies
   })
 }
 
@@ -95,13 +97,19 @@ function Harness(props: {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  readies: string[]
 }): ReactElement | null {
   const view = useMobileWebShellBridge({
     hostId: 'host-1',
     session: props.session,
     // A fresh closure every render, which is the shape a screen passes and the one a ref must
     // absorb: rebuilding the host here would settle every pending request on each render.
-    onPageFault: (error) => props.faults.push(error)
+    onPageFault: (error) => props.faults.push(error),
+    onPageReady: () => {
+      props.readies.push(
+        props.session.kind === 'ready' ? props.session.sessionId : props.session.kind
+      )
+    }
   })
   props.probe.view = view
   return props.session.kind === 'ready'
@@ -130,6 +138,8 @@ type Mounted = {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  /** The session id of every `ready` the page asked for, in order. */
+  readies: string[]
   update: (session: MobileWebShellSessionState) => Promise<void>
   deliver: (json: string) => Promise<void>
   frames: (sessionId: string) => BridgeHostMessage[]
@@ -141,9 +151,10 @@ async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
   const posted: PostedFrame[] = []
   const probe: Probe = { view: null }
   const faults: BridgeErrorCapture[] = []
+  const readies: string[] = []
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   const render = (next: MobileWebShellSessionState): ReactElement =>
-    createElement(Harness, { session: next, posted, probe, faults })
+    createElement(Harness, { session: next, posted, probe, faults, readies })
   await act(async () => {
     rendered.tree = create(render(session))
   })
@@ -156,6 +167,7 @@ async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
     posted,
     probe,
     faults,
+    readies,
     update: async (next) => {
       await act(async () => {
         tree.update(render(next))
@@ -343,7 +355,7 @@ describe('client changes', () => {
     const posted: PostedFrame[] = []
     const probe: Probe = { view: null }
     const render = (deliver: string | null): ReactElement =>
-      createElement(DeliverDuringCommit, { deliver, posted, probe, faults: [] })
+      createElement(DeliverDuringCommit, { deliver, posted, probe, faults: [], readies: [] })
     const rendered: { tree: ReactTestRenderer | null } = { tree: null }
     await act(async () => {
       rendered.tree = create(render(null))

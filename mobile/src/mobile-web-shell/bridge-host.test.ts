@@ -33,6 +33,7 @@ type Harness = {
   posted: string[]
   diagnostics: BridgeHostDiagnostic[]
   pageFaults: BridgeErrorCapture[]
+  pageReadyCount: () => number
   frames: () => BridgeHostMessage[]
   last: () => BridgeHostMessage
 }
@@ -48,6 +49,7 @@ function harness(
   const posted: string[] = []
   const diagnostics: BridgeHostDiagnostic[] = []
   const pageFaults: BridgeErrorCapture[] = []
+  let pageReadies = 0
   const host = createBridgeHost({
     client,
     post: (json) => {
@@ -59,6 +61,9 @@ function harness(
     onPageFault: (error) => {
       pageFaults.push(error)
       options.onPageFault?.(error)
+    },
+    onPageReady: () => {
+      pageReadies += 1
     },
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic)
   })
@@ -78,6 +83,7 @@ function harness(
     posted,
     diagnostics,
     pageFaults,
+    pageReadyCount: () => pageReadies,
     frames,
     last: () => {
       const all = frames()
@@ -145,6 +151,22 @@ describe('init and state', () => {
     bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(clientFrame({ type: 'ready' }))
     expect(bridge.frames().filter((frame) => frame.type === 'init')).toHaveLength(2)
+  })
+
+  it('tells the shell the page spoke, on the first ask and on every re-ask', () => {
+    const bridge = harness()
+    expect(bridge.pageReadyCount()).toBe(0)
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    // The shell bounds the wait for the first of these; a page on its backoff must not have to
+    // land a particular one to end it.
+    expect(bridge.pageReadyCount()).toBe(2)
+  })
+
+  it('says nothing about a page that never asked, however much else it posts', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'notify', name: 'foreground' }))
+    expect(bridge.pageReadyCount()).toBe(0)
   })
 
   it('pushes the event state, not the getter a listener can outrun', () => {
