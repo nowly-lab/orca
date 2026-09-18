@@ -34,6 +34,16 @@ let bridgeVersion = null
 let faultGrant = null
 
 /**
+ * Chunk paths the server answers with a module that throws on evaluation.
+ *
+ * The one way to reproduce the failure the boundary exists for: a route chunk that never arrives
+ * intact. Building a second bundle around a throwing route would test a synthetic tree; poisoning
+ * one file of the real bundle keeps everything else exactly what ships.
+ */
+const poisonedChunks = new Set()
+const POISON_MESSAGE = 'render check poisoned this route chunk'
+
+/**
  * Both CSP constants are a list of quoted directives with `//` comments between them, and those
  * comments quote directive text. Dropping comment lines first is what keeps a comment out of the
  * header this test serves.
@@ -193,7 +203,13 @@ beforeAll(async () => {
     const namesAFile = path.slice(path.lastIndexOf('/')).includes('.')
     const file = namesAFile ? path.slice(1) : 'index.html'
     readFile(join(outDir, file)).then(
-      (bytes) => {
+      (real) => {
+        // The real bytes with a throw in front: the module still links, so the importer resolves
+        // every export it asked for and then evaluation throws. A body replaced outright fails at
+        // link instead, which is a different failure from the one the boundary is here for.
+        const bytes = poisonedChunks.has(path)
+          ? `throw new Error(${JSON.stringify(POISON_MESSAGE)});\n${real.toString('utf8')}`
+          : real
         const headers = {
           'content-type': file.endsWith('.js') ? 'text/javascript' : 'text/html'
         }
@@ -494,6 +510,37 @@ describeRender('the Route A page in a real browser', () => {
     // Never the route tree at `/`: that is the Unmatched screen with a worse explanation.
     expect(text).not.toContain(UNMATCHED)
     expect(url).toBe('/')
+  }, 60_000)
+
+  it('tells the shell when a route chunk throws, rather than sitting on a blank page', async () => {
+    const chunk = routeChunks['./h/[hostId]/index.tsx']
+    expect(chunk, Object.keys(routeChunks).join(' ')).toBeTruthy()
+    poisonedChunks.add(`/assets/${chunk}`)
+    try {
+      const opened = await openPage({ shellRoute: { pathname: HOST_ROUTE } })
+      await opened.page.goto(`${origin}/`, { waitUntil: 'load' })
+      const reported = await opened.page
+        .waitForFunction(
+          () => {
+            const faults = globalThis.__orcaRenderCheckFaults ?? []
+            return faults.length > 0 ? faults : null
+          },
+          { timeout: 30_000, polling: 250 }
+        )
+        .then((handle) => handle.jsonValue())
+      // The message the poisoned module threw, carried across the bridge as the shell sees it. A
+      // boundary that caught the throw and reported something else would pass an "any fault" check.
+      expect(reported.join(' | ')).toContain(POISON_MESSAGE)
+      // And the screen never painted. The router's own shell commits before the deferred chunk
+      // rejects, so the entry does reach `mounted`; what the boundary takes away is everything
+      // below it, which is the difference between a reported failure and a blank page nobody hears.
+      const text = await opened.page.evaluate(() => document.body.innerText)
+      expect(text).not.toContain('Host not found')
+      expect(text).not.toContain(UNMATCHED)
+      await opened.page.close()
+    } finally {
+      poisonedChunks.delete(`/assets/${chunk}`)
+    }
   }, 60_000)
 
   it("fetches the next route's chunks on a client-side navigation", async () => {

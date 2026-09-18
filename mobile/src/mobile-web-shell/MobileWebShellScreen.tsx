@@ -14,10 +14,8 @@ import type {
   MobileWebShellSessionState
 } from './mobile-web-shell-session-contract'
 import { useMobileWebShellBridge } from './use-mobile-web-shell-bridge'
-import {
-  useMobileWebShellSession,
-  type MobileWebShellRuntime
-} from './use-mobile-web-shell-session'
+import type { MobileWebShellRuntime } from './mobile-web-shell-runtime'
+import { useMobileWebShellSession } from './use-mobile-web-shell-session'
 
 // Same guard as the Troubleshoot developer row: `__DEV__` is undefined outside the React Native
 // runtime, and the facts below are for whoever is bringing the shell up, not for a user.
@@ -139,11 +137,8 @@ export function MobileWebShellScreen({
 }: MobileWebShellScreenProps) {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const { state, pageRoutes, retry, reportShellFailure } = useMobileWebShellSession({
-    hostId,
-    routePathname: route.pathname,
-    runtime
-  })
+  const { state, pageRoutes, retry, reportShellFailure, reportDocumentLoaded, reportPageReady } =
+    useMobileWebShellSession({ hostId, routePathname: route.pathname, runtime })
   const bridge = useMobileWebShellBridge({
     hostId,
     route,
@@ -153,8 +148,18 @@ export function MobileWebShellScreen({
     // produced a tree. That reason drops this generation and downloads once, so a page broken by
     // bytes this host has since replaced recovers, and a page broken by its own code stops at the
     // failure screen instead of a blank one.
+    // Must not throw: it runs inside the page's own error boundary on one side and the native frame
+    // handler on the other, and neither has anywhere to put a throw.
     onPageFault: (error) => {
       console.warn('[web-shell] the page faulted', error)
+      reportShellFailure('document-load-failed')
+    },
+    onPageReady: reportPageReady,
+    // `document-load-failed` because that is what happens: the document loads and the page refuses
+    // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
+    // produced, and the second report is terminal, which is the failure screen this deserves.
+    onRouteRefused: (issue) => {
+      console.warn('[web-shell] refused to open this screen', issue)
       reportShellFailure('document-load-failed')
     },
     // Pushed, never replaced: the page stays mounted underneath, so Back reveals it with no
@@ -205,6 +210,12 @@ export function MobileWebShellScreen({
           const parsed = parseMobileWebShellLoadState(event.nativeEvent)
           if (parsed?.state === 'failed') {
             reportShellFailure(parsed.reason)
+            return
+          }
+          // A finished document is not a working one. The WebView says the response committed; only
+          // the page's own first frame says its code ran, so this is where the wait for it starts.
+          if (parsed?.state === 'ready') {
+            reportDocumentLoaded()
           }
         }}
       />

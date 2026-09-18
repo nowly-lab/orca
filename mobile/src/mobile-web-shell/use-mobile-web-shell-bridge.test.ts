@@ -75,6 +75,7 @@ function DeliverDuringCommit(props: {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  readies: string[]
 }): ReactElement {
   const { deliver, probe } = props
   useLayoutEffect(() => {
@@ -86,7 +87,8 @@ function DeliverDuringCommit(props: {
     session: readyState('session-one'),
     posted: props.posted,
     probe,
-    faults: props.faults
+    faults: props.faults,
+    readies: props.readies
   })
 }
 
@@ -95,6 +97,7 @@ function Harness(props: {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  readies: string[]
 }): ReactElement | null {
   const view = useMobileWebShellBridge({
     hostId: 'host-1',
@@ -105,7 +108,13 @@ function Harness(props: {
     onNavigate: (href) => props.probe.navigations.push(href),
     // A fresh closure every render, which is the shape a screen passes and the one a ref must
     // absorb: rebuilding the host here would settle every pending request on each render.
-    onPageFault: (error) => props.faults.push(error)
+    onPageFault: (error) => props.faults.push(error),
+    onRouteRefused: () => {},
+    onPageReady: () => {
+      props.readies.push(
+        props.session.kind === 'ready' ? props.session.sessionId : props.session.kind
+      )
+    }
   })
   props.probe.view = view
   return props.session.kind === 'ready'
@@ -134,6 +143,8 @@ type Mounted = {
   posted: PostedFrame[]
   probe: Probe
   faults: BridgeErrorCapture[]
+  /** The session id of every `ready` the page asked for, in order. */
+  readies: string[]
   update: (session: MobileWebShellSessionState) => Promise<void>
   deliver: (json: string) => Promise<void>
   frames: (sessionId: string) => BridgeHostMessage[]
@@ -145,9 +156,10 @@ async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
   const posted: PostedFrame[] = []
   const probe: Probe = { view: null, navigations: [] }
   const faults: BridgeErrorCapture[] = []
+  const readies: string[] = []
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   const render = (next: MobileWebShellSessionState): ReactElement =>
-    createElement(Harness, { session: next, posted, probe, faults })
+    createElement(Harness, { session: next, posted, probe, faults, readies })
   await act(async () => {
     rendered.tree = create(render(session))
   })
@@ -160,6 +172,7 @@ async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
     posted,
     probe,
     faults,
+    readies,
     update: async (next) => {
       await act(async () => {
         tree.update(render(next))
@@ -239,6 +252,8 @@ describe('the bridge channel', () => {
 
   it('hands a page fault to the screen and asks the client for nothing', async () => {
     const mounted = await mount(readyState('session-one'))
+    // The grant comes with the session, so the page asks for one before it reports anything.
+    await mounted.deliver(clientFrame({ type: 'ready' }))
     await mounted.deliver(
       clientFrame({
         type: 'notify',
@@ -256,6 +271,9 @@ describe('the bridge channel', () => {
     const mounted = await mount(readyState('session-one'))
     const stale = mounted.probe.view
     await mounted.update(readyState('session-two'))
+    // The live page asks first, so the host that hears the stale frame has issued its grants: what
+    // refuses the frame below is the session fence and not a page that had been told nothing.
+    await mounted.deliver(clientFrame({ type: 'ready' }))
     await act(async () => {
       stale?.onBridgeMessage({
         nativeEvent: {
@@ -377,7 +395,7 @@ describe('client changes', () => {
     const posted: PostedFrame[] = []
     const probe: Probe = { view: null, navigations: [] }
     const render = (deliver: string | null): ReactElement =>
-      createElement(DeliverDuringCommit, { deliver, posted, probe, faults: [] })
+      createElement(DeliverDuringCommit, { deliver, posted, probe, faults: [], readies: [] })
     const rendered: { tree: ReactTestRenderer | null } = { tree: null }
     await act(async () => {
       rendered.tree = create(render(null))

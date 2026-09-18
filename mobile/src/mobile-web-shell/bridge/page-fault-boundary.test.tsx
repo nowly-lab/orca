@@ -1,7 +1,7 @@
 import { createElement, type ReactElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import { createBridgePortPair } from './bridge-port-pair-test-harness'
+import { createFakeBridgePortPair } from './bridge-port-pair-test-harness'
 import { PageFaultBoundary } from './page-fault-boundary'
 
 const FAILURE = new Error('the route threw')
@@ -64,7 +64,7 @@ describe('the page fault boundary', () => {
   })
 
   it('carries the throw across a real bridge to the shell that mounted the page', async () => {
-    const pair = createBridgePortPair()
+    const pair = createFakeBridgePortPair()
     await pair.flush()
     await act(async () => {
       create(

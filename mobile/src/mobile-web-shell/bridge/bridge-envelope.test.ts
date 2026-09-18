@@ -242,6 +242,18 @@ describe('host messages', () => {
         route: { pathname: '/h/host-a/session/wt-1', params: { name: 'a branch' } }
       }
     ],
+    [
+      'an init whose segments merely contain dots, which are names and not navigation',
+      {
+        type: 'init',
+        sessionId: 's1',
+        buildId: 'b1',
+        connection: CONNECTION,
+        grants: GRANTS,
+        // Without this the refusals above would also pass a rule that banned the character.
+        route: { pathname: '/h/a..b/...' }
+      }
+    ],
     ['state', { type: 'state', connection: CONNECTION }],
     ['a whole reply', { type: 'reply', id: ID, payload: SUCCESS_PAYLOAD }],
     [
@@ -358,6 +370,19 @@ describe('host messages', () => {
     ['an init route that is backslash-relative', initRoute({ pathname: '/\\evil.example/h' })],
     ['an init route carrying its own query', initRoute({ pathname: '/h/a?name=b' })],
     ['an init route carrying a fragment', initRoute({ pathname: '/h/a#top' })],
+    // `replaceState` normalises each of these and the page then renders whatever came out:
+    // `/../../etc` resolves to `/etc`, `/h/a/../x` to `/h/x`, and `/h/a\\b` to `/h/a/b`. All three
+    // leave the `/h/<host>` prefix the page's tree starts at, which is the whole point of refusing
+    // shape rather than trusting the router to be handed one.
+    ['an init route that climbs out of its prefix', initRoute({ pathname: '/../../etc' })],
+    [
+      'an init route with an interior dot segment',
+      initRoute({ pathname: '/h/a/../render-check-host' })
+    ],
+    ['an init route ending in a dot segment', initRoute({ pathname: '/h/a/..' })],
+    ['an init route with a single dot segment', initRoute({ pathname: '/h/./a' })],
+    ['an init route with an interior backslash', initRoute({ pathname: '/h/a\\b' })],
+    ['an init route with an empty interior segment', initRoute({ pathname: '/h//a' })],
     ['an init route with an empty pathname', initRoute({ pathname: '' })],
     [
       'an init route over the pathname cap',

@@ -91,6 +91,10 @@ export function useMobileWebShellBridge(args: {
   onNavigate: (href: string) => void
   /** The page could not render the generation on screen. Reported, never recovered from here. */
   onPageFault: (error: BridgeErrorCapture) => void
+  /** The page asked for a session. Reported so the screen can stop waiting for it. */
+  onPageReady: () => void
+  /** This shell named a screen the protocol does not allow, so no session is served. */
+  onRouteRefused: (issue: string) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -107,6 +111,8 @@ export function useMobileWebShellBridge(args: {
   // fresh closure every render must not tear one down and settle its pendings.
   const navigateRef = useRef(args.onNavigate)
   const pageFaultRef = useRef(args.onPageFault)
+  const pageReadyRef = useRef(args.onPageReady)
+  const routeRefusedRef = useRef(args.onRouteRefused)
   // Commit-phase and declared above the host's effect, so the host is built against what this
   // render passed: a native frame can land between a commit and a passive effect.
   useLayoutEffect(() => {
@@ -114,7 +120,16 @@ export function useMobileWebShellBridge(args: {
     pageRoutesRef.current = args.pageRoutes
     navigateRef.current = args.onNavigate
     pageFaultRef.current = args.onPageFault
-  }, [args.onNavigate, args.onPageFault, args.pageRoutes, args.route])
+    pageReadyRef.current = args.onPageReady
+    routeRefusedRef.current = args.onRouteRefused
+  }, [
+    args.onNavigate,
+    args.onPageFault,
+    args.onPageReady,
+    args.onRouteRefused,
+    args.pageRoutes,
+    args.route
+  ])
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -130,6 +145,12 @@ export function useMobileWebShellBridge(args: {
       pageRoutes: pageRoutesRef.current,
       onPageFault: (error) => {
         pageFaultRef.current(error)
+      },
+      onPageReady: () => {
+        pageReadyRef.current()
+      },
+      onRouteRefused: (issue) => {
+        routeRefusedRef.current(issue)
       },
       onNavigate: (href) => {
         navigateRef.current(href)
