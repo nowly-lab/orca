@@ -1,3 +1,4 @@
+// ci-probe: throwaway no-op marker to route e2e specs. Do not merge.
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { reconcileClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
