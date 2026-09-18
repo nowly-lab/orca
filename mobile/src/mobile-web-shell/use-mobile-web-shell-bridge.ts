@@ -116,7 +116,6 @@ export function useMobileWebShellBridge(args: {
   // fresh closure every render must not tear one down and settle its pendings.
   const navigateRef = useRef(args.onNavigate)
   const storageWriteRef = useRef(args.onStorageWrite)
-  storageWriteRef.current = args.onStorageWrite
   const pageFaultRef = useRef(args.onPageFault)
   // Commit-phase and declared above the host's effect, so the host is built against what this
   // render passed: a native frame can land between a commit and a passive effect.
@@ -124,8 +123,9 @@ export function useMobileWebShellBridge(args: {
     routeRef.current = args.route
     pageRoutesRef.current = args.pageRoutes
     navigateRef.current = args.onNavigate
+    storageWriteRef.current = args.onStorageWrite
     pageFaultRef.current = args.onPageFault
-  }, [args.onNavigate, args.onPageFault, args.pageRoutes, args.route])
+  }, [args.onNavigate, args.onPageFault, args.onStorageWrite, args.pageRoutes, args.route])
   const snapshot = args.snapshot
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
