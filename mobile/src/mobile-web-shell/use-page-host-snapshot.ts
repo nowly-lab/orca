@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useCallback, useEffect, useState } from 'react'
 import { loadHosts } from '../transport/host-store'
 import type { BridgeInitHost } from './bridge/bridge-envelope'
-import { isPageStorageKeyForHost, pageStorageKeysForHost } from './page-storage-keys'
+import { isPageStorageKeyForHost } from './page-storage-keys'
+import { hydratePageStorage, readPageStorageForHost, writePageStorage } from './page-storage-mirror'
 
 export type PageHostSnapshot = {
   host: BridgeInitHost
@@ -17,12 +17,12 @@ export type PageHostSnapshotView = {
    */
   unreadable: boolean
   /**
-   * The allowlisted keys as the shell currently holds them, for the host to put on every `init`.
-   * Synchronous because `init` is; `refreshStorage` is what keeps it current.
+   * The allowlisted keys as the app currently holds them, for the host to put on every `init`.
+   * Synchronous because `init` is; the app's own writers keep it current as they write.
    */
   readStorage: () => Readonly<Record<string, string>>
-  /** Re-reads the app's store into that map. Cheap, and asked for whenever a page asks to start. */
-  refreshStorage: () => void
+  /** Re-seats that map on the app's store. Cheap, and asked for whenever a page asks to start. */
+  refreshStorage: () => Promise<void>
   /** Applies one page write to the app's store and to the map the next `init` will carry. */
   writeStorage: (key: string, value: string | null) => void
 }
@@ -35,42 +35,25 @@ export type PageHostSnapshotView = {
  * a page-side write is gone on the next remount. Both cross in `init` instead.
  *
  * The profile is read once per mount, because a host's identity does not change under one. The
- * keys are read per `init` answer, because they do: the page writes them, and a document that
- * reloads inside one mount would otherwise be primed from before its own writes.
+ * keys are re-seated per `init` answer, because the store is their truth; between those reads the
+ * map is kept current by every writer of one, which is what lets `init` stay synchronous.
  */
 export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
   const [snapshot, setSnapshot] = useState<PageHostSnapshot | null>(null)
   const [unreadable, setUnreadable] = useState(false)
-  const storageRef = useRef<Readonly<Record<string, string>>>({})
 
-  const refreshStorage = useCallback((): void => {
-    void AsyncStorage.multiGet(pageStorageKeysForHost(hostId)).then(
-      (pairs) => {
-        const next: Record<string, string> = {}
-        for (const [key, value] of pairs) {
-          // Checked again here rather than trusted from the key list: this is the value the page
-          // is handed, and the allowlist is all that stands between it and the app's namespace.
-          if (value !== null && isPageStorageKeyForHost(key, hostId)) {
-            next[key] = value
-          }
-        }
-        storageRef.current = next
-      },
-      () => {
-        // A store that would not answer leaves the last map standing. The page is primed from
-        // something stale rather than from nothing, and the next ask tries again.
-      }
-    )
-  }, [hostId])
+  const refreshStorage = useCallback((): Promise<void> => hydratePageStorage(hostId), [hostId])
 
   useEffect(() => {
     let stale = false
     setSnapshot(null)
     setUnreadable(false)
-    storageRef.current = {}
-    refreshStorage()
-    void loadHosts().then(
-      (hosts) => {
+    // Both reads, not whichever answers first. The host is built from the snapshot and answers the
+    // page's pending `ready` the moment it exists, so a profile that beat the store would put the
+    // page's own keys behind an empty map: the list paints unpinned and the New Workspace drawer
+    // opens on no repo until something else reconciles it. Only the profile read can reject.
+    void Promise.all([refreshStorage(), loadHosts()]).then(
+      ([, hosts]) => {
         if (stale) {
           return
         }
@@ -109,16 +92,6 @@ export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
       if (!isPageStorageKeyForHost(key, hostId)) {
         return
       }
-      // Mirrored before it is persisted, and that order is the point: the next `init` is answered
-      // from this map, and a document that reloads between the write and the store settling would
-      // otherwise be primed from before its own write.
-      const next = { ...storageRef.current }
-      if (value === null) {
-        delete next[key]
-      } else {
-        next[key] = value
-      }
-      storageRef.current = next
       writePageStorage(key, value)
     },
     [hostId]
@@ -127,18 +100,8 @@ export function usePageHostSnapshot(hostId: string): PageHostSnapshotView {
   return {
     snapshot,
     unreadable,
-    readStorage: useCallback(() => storageRef.current, []),
+    readStorage: useCallback(() => readPageStorageForHost(hostId), [hostId]),
     refreshStorage,
     writeStorage
   }
-}
-
-/** The page's writes, applied to the app's own store. Allowlisted by the envelope before it lands. */
-export function writePageStorage(key: string, value: string | null): void {
-  void (value === null ? AsyncStorage.removeItem(key) : AsyncStorage.setItem(key, value)).catch(
-    () => {
-      // Nothing is owed to the page for a notify, and a pin that failed to persist is not a reason
-      // to take the workspace off screen.
-    }
-  )
 }

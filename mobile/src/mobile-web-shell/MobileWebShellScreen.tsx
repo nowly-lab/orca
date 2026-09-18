@@ -160,11 +160,13 @@ export function MobileWebShellScreen({
       console.warn('[web-shell] the page faulted', error)
       reportShellFailure('document-load-failed')
     },
-    // Every ask, not just the first: a document that reloads inside this mount asks again, and the
-    // refresh is what lets a key the app changed meanwhile reach the `init` after this one.
+    // The `init` this ready is answered with is already built from the app's writes, which reach
+    // the map as they are made. This re-seats that map on the store afterwards, for the key whose
+    // write never persisted, and it runs on every ask because a document that reloads inside this
+    // mount asks again.
     onPageReady: () => {
       reportPageReady()
-      refreshStorage()
+      void refreshStorage()
     },
     // `document-load-failed` because that is what happens: the document loads and the page refuses
     // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
