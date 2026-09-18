@@ -4,8 +4,9 @@ import type {
   OrcaMobileWebShellViewHandle
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
+import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
-import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
+import { createBridgeHost, type BridgeHost } from './bridge-host'
 import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
@@ -13,36 +14,6 @@ class BridgeViewGoneError extends Error {
   constructor() {
     super('the shell view for this session is not mounted')
     this.name = 'BridgeViewGoneError'
-  }
-}
-
-/**
- * One line per kind, for the life of one host.
- *
- * A page that is failing frames fails all of them, and a line each buries the first — the one that
- * says why. The host already holds `post-failed` to one; this is the same bound for the kinds it
- * does not, and a new host starts the count over because a new page is new evidence.
- */
-function createBridgeDiagnosticReporter(): (diagnostic: BridgeHostDiagnostic) => void {
-  const reported = new Set<BridgeHostDiagnostic['kind']>()
-  return (diagnostic) => {
-    if (reported.has(diagnostic.kind)) {
-      return
-    }
-    reported.add(diagnostic.kind)
-    if (diagnostic.kind === 'refused') {
-      console.warn('[web-shell-bridge] refused a page frame', diagnostic.refusal)
-      return
-    }
-    if (diagnostic.kind === 'post-failed') {
-      console.warn('[web-shell-bridge] the page could not be posted to', diagnostic.error)
-      return
-    }
-    if (diagnostic.kind === 'notify-failed') {
-      console.warn('[web-shell-bridge] the client threw on a page notification', diagnostic.error)
-      return
-    }
-    console.warn('[web-shell-bridge] a view outlived its host and is still posting')
   }
 }
 

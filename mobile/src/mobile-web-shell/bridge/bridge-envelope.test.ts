@@ -254,6 +254,20 @@ describe('host messages', () => {
         route: { pathname: '/h/a..b/...' }
       }
     ],
+    [
+      'an init whose segments merely carry percent escapes, which are text and not navigation',
+      {
+        type: 'init',
+        sessionId: 's1',
+        buildId: 'b1',
+        connection: CONNECTION,
+        grants: GRANTS,
+        // An encoded space, a segment that starts with an encoded dot, and an encoded slash, which
+        // the router reads as one segment's text. Without these the refusals above would pass a
+        // rule that banned the escape rather than the dot segment it spells.
+        route: { pathname: '/h/a%20b/%2ex/a%2fb' }
+      }
+    ],
     ['state', { type: 'state', connection: CONNECTION }],
     ['a whole reply', { type: 'reply', id: ID, payload: SUCCESS_PAYLOAD }],
     [
@@ -382,6 +396,18 @@ describe('host messages', () => {
     ['an init route ending in a dot segment', initRoute({ pathname: '/h/a/..' })],
     ['an init route with a single dot segment', initRoute({ pathname: '/h/./a' })],
     ['an init route with an interior backslash', initRoute({ pathname: '/h/a\\b' })],
+    // The same climb, spelled the way a URL parser still reads as a dot segment: it percent-decodes
+    // the path before it resolves it, so `%2e%2e` escapes the prefix exactly as `..` does.
+    [
+      'an init route that climbs out of its prefix percent-encoded',
+      initRoute({ pathname: '/h/%2e%2e/render-check-host' })
+    ],
+    [
+      'an init route that climbs out of its prefix in capitals',
+      initRoute({ pathname: '/h/%2E%2E/render-check-host' })
+    ],
+    ['an init route with a half-encoded dot segment', initRoute({ pathname: '/h/.%2e/a' })],
+    ['an init route with a single encoded dot segment', initRoute({ pathname: '/h/%2e/a' })],
     ['an init route with an empty interior segment', initRoute({ pathname: '/h//a' })],
     ['an init route with an empty pathname', initRoute({ pathname: '' })],
     [
