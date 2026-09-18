@@ -78,7 +78,13 @@ bootstrapShellPage({
     // Before the first render, because both are read from effects that run on it: the host store is
     // a plain async function with no provider above it, and the first list paints its pins.
     publishPageHostProfile(session.host)
-    publishPageStorage(session.storage, (key, value) => client.notifyStorageWrite(key, value))
+    // Scoped to the host `init` named: with none, no key is writable, which is the right answer
+    // for a shell too old to say whose list this is.
+    publishPageStorage(
+      session.storage,
+      (key, value) => client.notifyStorageWrite(key, value),
+      session.host?.id ?? ''
+    )
     createRoot(container).render(
       // Above `ExpoRoot`, not inside its wrapper: a route this bundle cannot resolve or import
       // throws where the router renders it, and a boundary below the router never sees that.

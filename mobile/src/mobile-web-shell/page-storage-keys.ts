@@ -41,3 +41,16 @@ export function isPageStorageKey(key: string): boolean {
 export function pageStorageKeysForHost(hostId: string): string[] {
   return [...PAGE_STORAGE_EXACT_KEYS, `orca:pins:${hostId}`]
 }
+
+/**
+ * The allowlist narrowed to one host, which is the one every write is actually held to.
+ *
+ * `isPageStorageKey` answers for the shape, so `orca:pins:<any host>` passes it; a page opened for
+ * one host could therefore rewrite another's pinned list, which is not a key it was ever handed.
+ * What the page may write is exactly what it was given, so this is that same list.
+ */
+export function isPageStorageKeyForHost(key: string, hostId: string): boolean {
+  return (
+    key.length <= PAGE_STORAGE_MAX_KEY_CHARS && pageStorageKeysForHost(hostId).includes(key)
+  )
+}

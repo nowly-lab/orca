@@ -45,9 +45,11 @@ type Probe = {
 
 /** What the page cannot read for itself, as the screen hands it over. */
 const SNAPSHOT = {
-  host: { id: 'host-1', name: 'Host One', endpoint: 'ws://host-1', lastConnected: 7 },
-  storage: { 'orca:pins:host-1': '["wt-1"]' }
+  host: { id: 'host-1', name: 'Host One', endpoint: 'ws://host-1', lastConnected: 7 }
 }
+
+/** Read on every `init` rather than captured once, so this is a function here as it is there. */
+const STORAGE = { 'orca:pins:host-1': '["wt-1"]' }
 
 function fakeClient(): FakeRpcClient {
   const client = doubles.client
@@ -117,6 +119,7 @@ function Harness(props: {
     pageRoutes: ['/h/[hostId]'],
     onNavigate: (href) => props.probe.navigations.push(href),
     snapshot: SNAPSHOT,
+    readStorage: () => STORAGE,
     onStorageWrite: (key, value) => props.probe.storageWrites.push({ key, value }),
     // A fresh closure every render, which is the shape a screen passes and the one a ref must
     // absorb: rebuilding the host here would settle every pending request on each render.
@@ -241,7 +244,7 @@ describe('the bridge channel', () => {
         route: { pathname: '/h/host-1' },
         pageRoutes: ['/h/[hostId]'],
         host: SNAPSHOT.host,
-        storage: SNAPSHOT.storage
+        storage: STORAGE
       })
     ])
   })

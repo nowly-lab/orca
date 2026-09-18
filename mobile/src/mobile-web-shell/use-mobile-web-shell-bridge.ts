@@ -97,6 +97,8 @@ export function useMobileWebShellBridge(args: {
    * against a host it could not name.
    */
   snapshot: PageHostSnapshot | null
+  /** The allowlisted keys as the app holds them, asked for on each `init` rather than at mount. */
+  readStorage: () => Readonly<Record<string, string>>
   onStorageWrite: (key: string, value: string | null) => void
   /** The page could not render the generation on screen. Reported, never recovered from here. */
   onPageFault: (error: BridgeErrorCapture) => void
@@ -120,6 +122,7 @@ export function useMobileWebShellBridge(args: {
   // fresh closure every render must not tear one down and settle its pendings.
   const navigateRef = useRef(args.onNavigate)
   const storageWriteRef = useRef(args.onStorageWrite)
+  const readStorageRef = useRef(args.readStorage)
   const pageFaultRef = useRef(args.onPageFault)
   const pageReadyRef = useRef(args.onPageReady)
   const routeRefusedRef = useRef(args.onRouteRefused)
@@ -130,6 +133,7 @@ export function useMobileWebShellBridge(args: {
     pageRoutesRef.current = args.pageRoutes
     navigateRef.current = args.onNavigate
     storageWriteRef.current = args.onStorageWrite
+    readStorageRef.current = args.readStorage
     pageFaultRef.current = args.onPageFault
     pageReadyRef.current = args.onPageReady
     routeRefusedRef.current = args.onRouteRefused
@@ -139,6 +143,7 @@ export function useMobileWebShellBridge(args: {
     args.onPageReady,
     args.onRouteRefused,
     args.onStorageWrite,
+    args.readStorage,
     args.pageRoutes,
     args.route
   ])
@@ -169,7 +174,7 @@ export function useMobileWebShellBridge(args: {
         navigateRef.current(href)
       },
       host: snapshot.host,
-      storage: snapshot.storage,
+      readStorage: () => readStorageRef.current(),
       onStorageWrite: (key, value) => {
         storageWriteRef.current(key, value)
       },

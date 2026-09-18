@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { PAGE_STORAGE_MAX_VALUE_CHARS } from '../page-storage-keys'
 import pageAsyncStorage, { publishPageStorage } from './page-async-storage'
 
 type Write = { key: string; value: string | null }
@@ -6,15 +7,21 @@ type Write = { key: string; value: string | null }
 const writes: Write[] = []
 let granted = true
 
+const HOST_ID = 'host-1'
+
 function publish(entries: Record<string, string> = {}): void {
   writes.length = 0
-  publishPageStorage(entries, (key, value) => {
-    if (!granted) {
-      return false
-    }
-    writes.push({ key, value })
-    return true
-  })
+  publishPageStorage(
+    entries,
+    (key, value) => {
+      if (!granted) {
+        return false
+      }
+      writes.push({ key, value })
+      return true
+    },
+    HOST_ID
+  )
 }
 
 beforeEach(() => {
@@ -89,5 +96,32 @@ describe('a write the page makes', () => {
     await pageAsyncStorage.clear()
     expect(writes).toEqual([])
     await expect(pageAsyncStorage.getItem('orca:pins:host-1')).resolves.toBe('["wt-1"]')
+  })
+})
+
+describe('what the page will not keep', () => {
+  it("refuses another host's pinned list, so a later read cannot answer with it", async () => {
+    publish({ 'orca:pins:host-1': '["mine"]' })
+    await pageAsyncStorage.setItem('orca:pins:host-2', '["theirs"]')
+    // Nothing posted, and nothing cached: a value held here that the shell will not write is a pin
+    // that looks set to this document and to nothing else in the app.
+    expect(writes).toEqual([])
+    expect(await pageAsyncStorage.getItem('orca:pins:host-2')).toBeNull()
+  })
+
+  it('refuses a value over the envelope bound rather than caching what the wire will drop', async () => {
+    publish()
+    const oversized = 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS + 1)
+    await pageAsyncStorage.setItem('orca:last-visited-worktree', oversized)
+    expect(writes).toEqual([])
+    expect(await pageAsyncStorage.getItem('orca:last-visited-worktree')).toBeNull()
+  })
+
+  it('still keeps a value exactly at the bound, so the refusal above discriminates', async () => {
+    publish()
+    const atBound = 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS)
+    await pageAsyncStorage.setItem('orca:last-visited-worktree', atBound)
+    expect(writes).toEqual([{ key: 'orca:last-visited-worktree', value: atBound }])
+    expect(await pageAsyncStorage.getItem('orca:last-visited-worktree')).toBe(atBound)
   })
 })

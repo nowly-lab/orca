@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isPageStorageKey,
+  isPageStorageKeyForHost,
   pageStorageKeysForHost,
   PAGE_STORAGE_MAX_KEY_CHARS
 } from './page-storage-keys'
@@ -44,5 +45,18 @@ describe('the keys a page may read and write', () => {
     for (const key of keys) {
       expect(isPageStorageKey(key), key).toBe(true)
     }
+  })
+})
+
+describe('the allowlist narrowed to one host', () => {
+  it('admits exactly the keys that host was handed', () => {
+    for (const key of pageStorageKeysForHost('host-1')) {
+      expect(isPageStorageKeyForHost(key, 'host-1'), key).toBe(true)
+    }
+  })
+
+  it("refuses another host's pinned list, which the shape check alone admits", () => {
+    expect(isPageStorageKey('orca:pins:host-2')).toBe(true)
+    expect(isPageStorageKeyForHost('orca:pins:host-2', 'host-1')).toBe(false)
   })
 })

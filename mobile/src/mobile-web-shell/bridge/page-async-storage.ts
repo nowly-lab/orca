@@ -1,4 +1,4 @@
-import { isPageStorageKey } from '../page-storage-keys'
+import { isPageStorageKeyForHost, PAGE_STORAGE_MAX_VALUE_CHARS } from '../page-storage-keys'
 
 /**
  * The page's AsyncStorage: the app's store, read from `init` and written over the `storage` grant.
@@ -17,17 +17,21 @@ type PageStorageWriter = (key: string, value: string | null) => boolean
 
 const values = new Map<string, string>()
 let write: PageStorageWriter = () => false
+/** The host this document was opened for; no key belonging to another one is writable. */
+let hostId = ''
 
 /** Called once by the entry, before anything renders, with what `init` carried. */
 export function publishPageStorage(
   entries: Readonly<Record<string, string>>,
-  writer: PageStorageWriter
+  writer: PageStorageWriter,
+  forHostId: string
 ): void {
   values.clear()
   for (const [key, value] of Object.entries(entries)) {
     values.set(key, value)
   }
   write = writer
+  hostId = forHostId
 }
 
 /**
@@ -38,7 +42,12 @@ export function publishPageStorage(
  * which is exactly the failure the grant exists to avoid.
  */
 function accept(key: string, value: string | null): boolean {
-  if (!isPageStorageKey(key)) {
+  if (!isPageStorageKeyForHost(key, hostId)) {
+    return false
+  }
+  // The envelope's own bound, imported rather than restated: without it an oversized value is
+  // cached here and dropped on the wire, so the page reads back a write no other screen can see.
+  if (value !== null && value.length > PAGE_STORAGE_MAX_VALUE_CHARS) {
     return false
   }
   if (!write(key, value)) {

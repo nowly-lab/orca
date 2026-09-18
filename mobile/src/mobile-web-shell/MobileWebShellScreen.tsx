@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -16,7 +16,7 @@ import type {
 import { useMobileWebShellBridge } from './use-mobile-web-shell-bridge'
 import type { MobileWebShellRuntime } from './mobile-web-shell-runtime'
 import { useMobileWebShellSession } from './use-mobile-web-shell-session'
-import { usePageHostSnapshot, writePageStorage } from './use-page-host-snapshot'
+import { usePageHostSnapshot } from './use-page-host-snapshot'
 
 // Same guard as the Troubleshoot developer row: `__DEV__` is undefined outside the React Native
 // runtime, and the facts below are for whoever is bringing the shell up, not for a user.
@@ -140,14 +140,16 @@ export function MobileWebShellScreen({
   const router = useRouter()
   const { state, pageRoutes, retry, reportShellFailure, reportDocumentLoaded, reportPageReady } =
     useMobileWebShellSession({ hostId, routePathname: route.pathname, runtime })
-  const snapshot = usePageHostSnapshot(hostId)
+  const { snapshot, unreadable, readStorage, refreshStorage, writeStorage } =
+    usePageHostSnapshot(hostId)
   const bridge = useMobileWebShellBridge({
     hostId,
     route,
     pageRoutes,
     session: state,
     snapshot,
-    onStorageWrite: writePageStorage,
+    readStorage,
+    onStorageWrite: writeStorage,
     // Reported as the document failing to load, which is what it is: the document loaded and never
     // produced a tree. That reason drops this generation and downloads once, so a page broken by
     // bytes this host has since replaced recovers, and a page broken by its own code stops at the
@@ -158,7 +160,12 @@ export function MobileWebShellScreen({
       console.warn('[web-shell] the page faulted', error)
       reportShellFailure('document-load-failed')
     },
-    onPageReady: reportPageReady,
+    // Every ask, not just the first: a document that reloads inside this mount asks again, and the
+    // refresh is what lets a key the app changed meanwhile reach the `init` after this one.
+    onPageReady: () => {
+      reportPageReady()
+      refreshStorage()
+    },
     // `document-load-failed` because that is what happens: the document loads and the page refuses
     // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
     // produced, and the second report is terminal, which is the failure screen this deserves.
@@ -172,6 +179,18 @@ export function MobileWebShellScreen({
       router.push(href)
     }
   })
+
+  // A profile read that rejected never becomes a host, so the session would otherwise sit in
+  // `ready` behind an un-hidden view with nothing serving it and the page asking forever.
+  // `document-load-failed` because that is the outcome: the document loads and no session opens.
+  // The refetch it costs is wasted on a device-local read, and the second report is terminal, which
+  // is the failure screen with a Try again this deserves.
+  useEffect(() => {
+    if (unreadable) {
+      console.warn('[web-shell] this host could not be read from the app store')
+      reportShellFailure('document-load-failed')
+    }
+  }, [reportShellFailure, unreadable])
 
   if (state.kind === 'native-route') {
     return fallback

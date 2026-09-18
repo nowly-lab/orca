@@ -39,8 +39,8 @@ export function useHostWorktreeActions(args: {
     newWorktreeModalRef,
     newWorktreeModalVisibleRef,
     pinnedIds,
+    setActionError,
     setConfirmRemoveHost,
-    setError,
     setLastKnownWorktrees,
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
@@ -152,10 +152,12 @@ export function useHostWorktreeActions(args: {
       // Why: removal can fail while still paired; re-open confirm (ConfirmModal closes on confirm).
       setConfirmRemoveHost(true)
       // Not `Alert.alert`: it is a silent no-op in React Native Web, so inside the shell's page
-      // this failure had no surface at all. The list already has one, and it shows on both.
-      setError('Could not remove host. Please try again.')
+      // this failure had no surface at all. And not the identity error either: that one is an
+      // early return over the whole screen with nothing to dismiss it, so a removal that failed
+      // once would cost the list, the header and the confirm this line is asking to re-open.
+      setActionError('Could not remove host. Please try again.')
     }
-  }, [hostId, leaveHost, forgetHostClient, setConfirmRemoveHost, setError])
+  }, [hostId, leaveHost, forgetHostClient, setActionError, setConfirmRemoveHost])
 
   const navigateFromHostList = useCallback(
     (target: string) => {

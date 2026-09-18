@@ -168,7 +168,7 @@ export function createBridgePortPair<TRpc extends RpcClient>(
     pageRoutes: options.pageRoutes ?? ['/h/[hostId]'],
     onNavigate: (href) => navigations.push(href),
     host: { id: 'host-a', name: 'Host A', endpoint: 'ws://host-a', lastConnected: 0 },
-    storage: options.storage ?? {},
+    readStorage: () => options.storage ?? {},
     onStorageWrite: (key, value) => storageWrites.push({ key, value }),
     onPageFault: (error) => pageFaults.push(error),
     onPageReady: () => {

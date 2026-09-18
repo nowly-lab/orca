@@ -172,6 +172,32 @@ describe('init and state', () => {
     )
   })
 
+  it("refuses a write for another host's pinned list, which the envelope lets through", () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    // `orca:pins:<any host>` is the right shape, so only the host knows this one is not the page's.
+    bridge.host.receive(
+      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:other-host', value: '["x"]' })
+    )
+    expect(bridge.storageWrites).toEqual([])
+    expect(bridge.diagnostics).toEqual([{ kind: 'storage-refused', key: 'orca:pins:other-host' }])
+  })
+
+  it('reads the keys again for each init, rather than replaying what it started with', () => {
+    let pins = '["one"]'
+    const bridge = harness({ readStorage: () => ({ 'orca:pins:host-a': pins }) })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    pins = '["one","two"]'
+    // The document that reloads inside one mount asks again, and has to be primed from after its
+    // own writes rather than from the map the mount started with.
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    const inits = bridge.frames().filter((frame) => frame.type === 'init')
+    expect(inits.map((frame) => (frame.type === 'init' ? frame.storage : null))).toEqual([
+      { 'orca:pins:host-a': '["one"]' },
+      { 'orca:pins:host-a': '["one","two"]' }
+    ])
+  })
+
   it('hands the page what the app holds for the keys it may read', () => {
     const bridge = harness({ storage: { 'orca:pins:host-a': '["wt-1"]' } })
     bridge.host.receive(clientFrame({ type: 'ready' }))

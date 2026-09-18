@@ -42,6 +42,8 @@ export function harness(
     route?: BridgeInitRoute
     onNavigate?: (href: string) => void
     storage?: Readonly<Record<string, string>>
+    /** For the suites that need the map to change between two `init` answers. */
+    readStorage?: () => Readonly<Record<string, string>>
     onPageFault?: (error: BridgeErrorCapture) => void
   } = {}
 ): Harness {
@@ -64,7 +66,7 @@ export function harness(
     route: options.route ?? ROUTE,
     pageRoutes: PAGE_ROUTES,
     host: HOST,
-    storage: options.storage ?? {},
+    readStorage: options.readStorage ?? (() => options.storage ?? {}),
     onStorageWrite: (key, value) => storageWrites.push({ key, value }),
     onPageReady: () => {
       pageReadies += 1

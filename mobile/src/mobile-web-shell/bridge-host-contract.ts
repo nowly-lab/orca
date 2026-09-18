@@ -20,6 +20,8 @@ export type BridgeHostDiagnostic =
   /** A frame that arrived between a page's `close` and the next document's `ready`. It belongs to
    *  the closed document, and serving it would answer into whatever loads in next. */
   | { kind: 'frame-after-close' }
+  /** A write for a key this page was never handed: another host's pinned list. */
+  | { kind: 'storage-refused'; key: string }
   /** A `notify` the host will not act on: a grant-gated name it never issued, or any name from a
    *  page that has not asked for a session yet. Nothing is owed back, so it is logged and dropped. */
   | { kind: 'notify-refused'; name: string; why: BridgeNotifyRefusal }
@@ -46,8 +48,12 @@ export type BridgeHostOptions = {
   pageRoutes: readonly string[]
   /** The host the page is showing, minus the credential the bridge already carries for it. */
   host: BridgeInitHost
-  /** The allowlisted keys as the app holds them, which is the page's whole read side. */
-  storage: Readonly<Record<string, string>>
+  /**
+   * The allowlisted keys as the app holds them, asked for on every `init` rather than captured at
+   * mount: a document that reloads inside one mount has to be primed from after its own writes.
+   * Synchronous, because `init` is — see `sendInit`.
+   */
+  readStorage: () => Readonly<Record<string, string>>
   /** One allowlisted key written, or removed when the value is null. */
   onStorageWrite: (key: string, value: string | null) => void
   /**
