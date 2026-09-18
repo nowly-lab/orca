@@ -102,7 +102,11 @@ export function useMobileWebShellBridge(args: {
   // Read through a ref for the same reason: a caller's fresh closure every render must not tear a
   // host down and settle its pendings.
   const pageFaultRef = useRef(args.onPageFault)
-  pageFaultRef.current = args.onPageFault
+  // Commit-phase and declared above the host's effect, so the host is built against the callback
+  // this render passed: a native frame can land between a commit and a passive effect.
+  useLayoutEffect(() => {
+    pageFaultRef.current = args.onPageFault
+  }, [args.onPageFault])
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
