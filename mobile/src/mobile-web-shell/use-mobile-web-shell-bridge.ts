@@ -111,21 +111,21 @@ export function useMobileWebShellBridge(args: {
   // changed afterwards would have nothing left to change. Held in a ref for that reason — an inline
   // object in the deps would rebuild the host on every render and settle its pendings each time.
   const routeRef = useRef(args.route)
-  routeRef.current = args.route
   const pageRoutesRef = useRef(args.pageRoutes)
-  pageRoutesRef.current = args.pageRoutes
   // Read through a ref for the same reason: the host is built once per session, and a caller's
   // fresh closure every render must not tear one down and settle its pendings.
   const navigateRef = useRef(args.onNavigate)
-  navigateRef.current = args.onNavigate
   const storageWriteRef = useRef(args.onStorageWrite)
   storageWriteRef.current = args.onStorageWrite
   const pageFaultRef = useRef(args.onPageFault)
-  // Commit-phase and declared above the host's effect, so the host is built against the callback
-  // this render passed: a native frame can land between a commit and a passive effect.
+  // Commit-phase and declared above the host's effect, so the host is built against what this
+  // render passed: a native frame can land between a commit and a passive effect.
   useLayoutEffect(() => {
+    routeRef.current = args.route
+    pageRoutesRef.current = args.pageRoutes
+    navigateRef.current = args.onNavigate
     pageFaultRef.current = args.onPageFault
-  }, [args.onPageFault])
+  }, [args.onNavigate, args.onPageFault, args.pageRoutes, args.route])
   const snapshot = args.snapshot
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
