@@ -334,12 +334,72 @@ describe('diagnostics', () => {
     expect(warned).toHaveBeenCalledTimes(1)
   })
 
+  it('names the notification it refused and why, rather than blaming the view', async () => {
+    const mounted = await mount(readyState('session-one'))
+    // No `ready` first, so the page holds nothing the host issued and the frame is refused for it.
+    await mounted.deliver(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'too early', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(mounted.faults).toEqual([])
+    expect(warned).toHaveBeenCalledWith(expect.stringContaining('refused a page notification'), {
+      name: BRIDGE_FAULT_GRANT,
+      why: 'before-ready'
+    })
+  })
+
   it('starts the count over for the next page', async () => {
     const mounted = await mount(readyState('session-one'))
     await mounted.deliver('{"v":1,"type":')
     await mounted.update(readyState('session-two'))
     await mounted.deliver('{"v":1,"type":')
     expect(warned).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('the callbacks a render passes', () => {
+  it('faults into the latest render, not into the closure the host was built with', async () => {
+    const first: BridgeErrorCapture[] = []
+    const second: BridgeErrorCapture[] = []
+    const posted: PostedFrame[] = []
+    const probe: Probe = { view: null }
+    // One session throughout, so the host is never rebuilt: only the ref refresh can carry the
+    // second render's callback to a frame that arrives after it.
+    const render = (faults: BridgeErrorCapture[]): ReactElement =>
+      createElement(Harness, {
+        session: readyState('session-one'),
+        posted,
+        probe,
+        faults,
+        readies: []
+      })
+    const rendered: { tree: ReactTestRenderer | null } = { tree: null }
+    await act(async () => {
+      rendered.tree = create(render(first))
+    })
+    await act(async () => {
+      rendered.tree?.update(render(second))
+    })
+    const deliver = async (json: string): Promise<void> => {
+      await act(async () => {
+        probe.view?.onBridgeMessage({ nativeEvent: { json } })
+      })
+    }
+    await deliver(clientFrame({ type: 'ready' }))
+    await deliver(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'the route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(first).toEqual([])
+    expect(second).toEqual([
+      { category: 'Error', message: 'the route threw', isRpcDeliveryUnknown: false }
+    ])
   })
 })
 
