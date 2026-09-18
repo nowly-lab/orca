@@ -1,7 +1,12 @@
 import { useMemo } from 'react'
 import { useRouter } from 'expo-router'
+import {
+  BRIDGE_MAX_ROUTE_HREF_CHARS,
+  BRIDGE_ROUTE_HREF_PATTERN
+} from '../mobile-web-shell/bridge/bridge-caps'
 import { matchesRoutePattern } from '../mobile-web-shell/page-route-policy'
 import { usePageBridgeClient } from '../transport/client-context.web'
+import { stringifyRouteHref, type RouterHref } from './route-href'
 import type { RouteHandoff } from './route-handoff'
 
 /** The path half of a target, which is what the shell's route patterns are written against. */
@@ -20,27 +25,42 @@ function pathnameOf(href: string): string {
  *
  * The three members that leave this document are wrapped and the rest are the router's own: the
  * shell says which routes are the page's, in `init`, and the same answer drives all three. A
- * handoff the shell cannot honour — an older shell that granted no `navigate` — falls through to
- * the local router: Unmatched is a worse screen than the one the page is on, but a tap that does
- * nothing at all is worse than both, and the route policy is what keeps that case off a device.
+ * handoff the shell cannot honour — an older shell that granted no `navigate`, or a target the
+ * protocol refuses — falls through to the local router: Unmatched is a worse screen than the one
+ * the page is on, but a tap that does nothing at all is worse than both, and the route policy is
+ * what keeps that case off a device.
+ *
+ * Whether the target names a screen that exists is nobody's business here; the shape is all this
+ * can check, and C1.7 is where a real route-existence check belongs.
  */
 export function useRouteHandoff(): RouteHandoff {
   const client = usePageBridgeClient()
   const router = useRouter()
 
   return useMemo<RouteHandoff>(() => {
-    const handOff = (href: string): boolean => {
-      const pathname = pathnameOf(href)
+    const handOff = (href: RouterHref): boolean => {
+      // Resolved, not stringified: the object form is `[object Object]` under `String`, and the
+      // Connection-log link on a reconnecting host builds one every time it renders.
+      const target = stringifyRouteHref(href)
+      const pathname = pathnameOf(target)
       const pageRoutes = client.getShellSession()?.pageRoutes ?? []
       if (pageRoutes.some((pattern) => matchesRoutePattern(pathname, pattern))) {
         return false
       }
-      return client.notifyNavigate(href)
+      // Checked here, because `notifyNavigate` answers whether the frame left the page and not
+      // whether the shell accepted it. The shell's reader drops a frame the pattern refuses, and a
+      // handoff that reported success into a dropped frame is a tap that does nothing at all.
+      // `pathnameOf` strips a fragment before matching, so without this an href carrying one is
+      // posted whole and refused on the other side.
+      if (target.length > BRIDGE_MAX_ROUTE_HREF_CHARS || !BRIDGE_ROUTE_HREF_PATTERN.test(target)) {
+        return false
+      }
+      return client.notifyNavigate(target)
     }
     return {
       ...router,
       push: (href) => {
-        if (!handOff(String(href))) {
+        if (!handOff(href)) {
           router.push(href)
         }
       },
@@ -48,14 +68,14 @@ export function useRouteHandoff(): RouteHandoff {
       // becomes one too. What it replaces is a history entry inside this document, which the native
       // stack never had; leaving it is what lets Back come back to the page.
       replace: (href) => {
-        if (!handOff(String(href))) {
+        if (!handOff(href)) {
           router.replace(href)
         }
       },
       // The list's own way out of the host. Inside the page there is no stack to pop to: the phone's
       // home screen is a native route, so it is handed over like any other.
       dismissTo: (href) => {
-        if (!handOff(String(href))) {
+        if (!handOff(href)) {
           router.dismissTo(href)
         }
       }

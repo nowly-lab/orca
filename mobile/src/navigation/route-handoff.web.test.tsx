@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BRIDGE_MAX_ROUTE_HREF_CHARS } from '../mobile-web-shell/bridge/bridge-caps'
 import { BRIDGE_PROTOCOL_VERSION } from '../mobile-web-shell/bridge/bridge-envelope'
 import { createShellPageClient } from '../mobile-web-shell/bridge/page-bootstrap'
 import type { BridgeRpcClient } from '../mobile-web-shell/bridge/bridge-rpc-client'
@@ -194,5 +195,61 @@ describe('a shell that granted no navigate', () => {
     handoff.push('/h/host-a/tasks')
     expect(navigations(posted)).toEqual([])
     expect(router.push).toHaveBeenCalledWith('/h/host-a/tasks')
+  })
+})
+
+/**
+ * Two hrefs the page actually builds that the shell would have dropped.
+ *
+ * `notifyNavigate` answers whether the frame left the page, never whether the shell took it, so
+ * both of these used to suppress the local fallback and leave a dead tap.
+ */
+describe('a target the shell would refuse', () => {
+  it('resolves the object form the Connection-log link builds, rather than posting [object Object]', () => {
+    const { posted, handoff } = mount(INIT)
+    // host-workspace-list.tsx renders this whenever a host is reconnecting with three attempts.
+    handoff.push({ pathname: '/connection-log', params: { hostId: 'host a/b' } })
+    expect(navigations(posted)).toEqual([
+      {
+        v: BRIDGE_PROTOCOL_VERSION,
+        type: 'notify',
+        name: 'navigate',
+        href: '/connection-log?hostId=host+a%2Fb'
+      }
+    ])
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('fills a dynamic segment from its own param, the way the router does', () => {
+    const { posted, handoff } = mount({ ...INIT, pageRoutes: [] })
+    handoff.push({ pathname: '/h/[hostId]/tasks', params: { hostId: 'host-b', from: 'list' } })
+    expect(navigations(posted)).toEqual([
+      {
+        v: BRIDGE_PROTOCOL_VERSION,
+        type: 'notify',
+        name: 'navigate',
+        href: '/h/host-b/tasks?from=list'
+      }
+    ])
+  })
+
+  it('falls through locally for an href the pattern refuses, instead of a tap that does nothing', () => {
+    for (const href of ['/h/host-a/tasks#top', '/h/host-a/../tasks', '/h/a\\b/tasks']) {
+      router.push.mockClear()
+      const { posted, handoff } = mount(INIT)
+      handoff.push(href)
+      // Posted whole before this: `pathnameOf` strips the fragment to match, and the unstripped
+      // href went on the wire and was dropped by the shell's reader.
+      expect(navigations(posted), href).toEqual([])
+      expect(router.push, href).toHaveBeenCalledWith(href)
+    }
+  })
+
+  it('falls through for a target over the href cap', () => {
+    const { posted, handoff } = mount(INIT)
+    const href = `/h/host-a/${'a'.repeat(BRIDGE_MAX_ROUTE_HREF_CHARS)}`
+    handoff.push(href)
+    expect(navigations(posted)).toEqual([])
+    expect(router.push).toHaveBeenCalledWith(href)
   })
 })

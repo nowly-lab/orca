@@ -101,13 +101,35 @@ describe('init and state', () => {
   it('refuses a navigate frame that is not a path this app could open', () => {
     const bridge = harness()
     bridge.host.receive(clientFrame({ type: 'ready' }))
-    for (const href of ['//evil.example/h', 'h/host-a', 'https://evil.example', '/h#top']) {
+    // The last three are shapes `replaceState` and the native push both normalise: `/h/../../etc/x`
+    // resolves out of the `/h/` prefix entirely, and with no `+not-found` file expo-router's
+    // Unmatched then paints over the shell. Whether the target names a screen that exists is not
+    // something shape can answer; that check is C1.7's.
+    const refused = [
+      '//evil.example/h',
+      'h/host-a',
+      'https://evil.example',
+      '/h#top',
+      '/h/../../etc/x',
+      '/h/host-a/./tasks',
+      '/h/a\\b'
+    ]
+    for (const href of refused) {
       bridge.host.receive(clientFrame({ type: 'notify', name: 'navigate', href }))
     }
     expect(bridge.navigations).toEqual([])
     expect(bridge.diagnostics).toEqual(
-      Array.from({ length: 4 }, () => ({ kind: 'refused', refusal: 'unrecognised-message' }))
+      refused.map(() => ({ kind: 'refused', refusal: 'unrecognised-message' }))
     )
+  })
+
+  it('opens a target whose segments merely contain dots, which the refusals above must not', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(
+      clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-a/a..b?q=.' })
+    )
+    expect(bridge.navigations).toEqual(['/h/host-a/a..b?q=.'])
   })
 
   it('serves no navigate to a page that has said goodbye', () => {

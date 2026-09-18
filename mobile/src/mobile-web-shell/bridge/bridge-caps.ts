@@ -60,7 +60,11 @@ const ROUTE_PATH_SOURCE = `/(?:${BRIDGE_ROUTE_SEGMENT_SOURCE}(?:/${BRIDGE_ROUTE_
 export const BRIDGE_ROUTE_PATHNAME_PATTERN = new RegExp(`^${ROUTE_PATH_SOURCE}$`)
 
 /** A `navigate` target: the same path, plus the query the screen is opened with. Still no
- *  fragment — the shell matches on a pathname, and a `#` is the page's own business. */
+ *  fragment — the shell matches on a pathname, and a `#` is the page's own business.
+ *
+ *  Shape only. Whether the target names a screen the app actually has is a different question and
+ *  a later one: with no `+not-found` file, expo-router's Unmatched paints over the shell for a
+ *  well-formed path nobody routes. C1.7 owns that check. */
 export const BRIDGE_ROUTE_HREF_PATTERN = new RegExp(
   String.raw`^${ROUTE_PATH_SOURCE}(?:\?[^#\s]*)?$`
 )
