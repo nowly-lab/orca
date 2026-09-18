@@ -140,7 +140,14 @@ export function MobileWebShellScreen({ hostId, route, runtime }: MobileWebShellS
       console.warn('[web-shell] the page faulted', error)
       reportShellFailure('document-load-failed')
     },
-    onPageReady: reportPageReady
+    onPageReady: reportPageReady,
+    // `document-load-failed` because that is what happens: the document loads and the page refuses
+    // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
+    // produced, and the second report is terminal, which is the failure screen this deserves.
+    onRouteRefused: (issue) => {
+      console.warn('[web-shell] refused to open this screen', issue)
+      reportShellFailure('document-load-failed')
+    }
   })
 
   if (state.kind === 'wall') {

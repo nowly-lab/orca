@@ -45,7 +45,12 @@ export default function MobileWebShellRoute() {
   }
   // The screen the page stands in for. The document is served at `/`, which matches no route in
   // the tree the page carries, so this is the only thing that tells it which one to open.
-  return <MobileWebShellScreen hostId={hostId} route={{ pathname: `/h/${hostId}` }} />
+  // Encoded, not interpolated raw: `hostId` arrives decoded from the URL, so one carrying `?`, `#`
+  // or whitespace would build a pathname the page refuses and never mount anything. The page
+  // decodes it back when it matches `[hostId]`, so the screen it opens is the same one.
+  return (
+    <MobileWebShellScreen hostId={hostId} route={{ pathname: `/h/${encodeURIComponent(hostId)}` }} />
+  )
 }
 
 const styles = StyleSheet.create({

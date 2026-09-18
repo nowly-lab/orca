@@ -107,6 +107,7 @@ function Harness(props: {
     // A fresh closure every render, which is the shape a screen passes and the one a ref must
     // absorb: rebuilding the host here would settle every pending request on each render.
     onPageFault: (error) => props.faults.push(error),
+    onRouteRefused: () => {},
     onPageReady: () => {
       props.readies.push(
         props.session.kind === 'ready' ? props.session.sessionId : props.session.kind
