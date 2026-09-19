@@ -103,15 +103,25 @@ test('custom viewer selects records and dispatches a fixture automation through 
     await orcaPage.getByRole('option', { name: 'Viewer fixture', exact: true }).click()
     await orcaPage.getByRole('button', { name: 'Save connection', exact: true }).click()
     const frame = orcaPage.frameLocator('iframe[title="Selection Viewer"]:visible')
-    await expect(frame.getByLabel('候補A')).toBeVisible()
-    await frame.getByLabel('候補A').check()
-    await frame.getByLabel('候補B').check()
+    await expect(frame.getByRole('checkbox', { name: '候補A', exact: true })).toBeVisible()
+    await frame.getByRole('checkbox', { name: '候補A', exact: true }).check()
+    await frame.getByRole('checkbox', { name: '候補B', exact: true }).check()
     await frame.getByLabel('追加の指示').fill('選択された2件を処理してください')
     await frame.getByRole('button', { name: '実行', exact: true }).click()
-    await expect(frame.getByRole('status')).toContainText('受付済み:')
+    await expect(
+      frame.getByRole('group', { name: '一括実行', exact: true }).getByRole('status')
+    ).toContainText('受付済み:')
     await expect(orcaPage.getByRole('button', { name: 'Skipped', exact: true })).toBeVisible({
       timeout: 30000
     })
+    const taskA = frame.getByRole('group', { name: '候補A', exact: true })
+    await taskA.getByRole('textbox').fill('この1件だけを処理してください')
+    await taskA.getByRole('button', { name: 'このタスクを実行', exact: true }).click()
+    await expect(taskA.getByRole('status')).toContainText('受付済み:')
+    await expect(orcaPage.getByRole('button', { name: 'Skipped', exact: true })).toHaveCount(2, {
+      timeout: 30000
+    })
+
     await expect(
       orcaPage.getByText('Recent runs — execution ending does not confirm task success.')
     ).toBeVisible()
@@ -123,10 +133,12 @@ test('custom viewer selects records and dispatches a fixture automation through 
       JSON.stringify({ items: [{ id: 'a', title: '候補A 更新' }] })
     )
     await frame.getByRole('button', { name: '実行', exact: true }).click()
-    await expect(frame.getByRole('status')).toContainText('data_changed')
+    await expect(
+      frame.getByRole('group', { name: '一括実行', exact: true }).getByRole('status')
+    ).toContainText('data_changed')
 
     await frame.getByRole('button', { name: 'データを再読込', exact: true }).click()
-    await expect(frame.getByLabel('候補A 更新')).toBeVisible()
+    await expect(frame.getByRole('checkbox', { name: '候補A 更新', exact: true })).toBeVisible()
     // Reopening the same viewer reuses its tab; another plugin has an independent binding.
     await orcaPage.getByRole('button', { name: 'New tab', exact: true }).first().click()
     await orcaPage.getByRole('menuitem', { name: 'Selection Viewer', exact: true }).click()
@@ -136,7 +148,7 @@ test('custom viewer selects records and dispatches a fixture automation through 
     await orcaPage.getByRole('menuitem', { name: 'Second Viewer', exact: true }).click()
     await expect(orcaPage.getByText('Connect a dataset and automation')).toBeVisible()
     await orcaPage.getByRole('button', { name: 'Close tab', exact: true }).last().click()
-    await expect(frame.getByLabel('候補A 更新')).toBeVisible()
+    await expect(frame.getByRole('checkbox', { name: '候補A 更新', exact: true })).toBeVisible()
     const html = await readFile(join(pluginRoot, 'panel.html'), 'utf8')
     await writeFile(
       join(pluginRoot, 'panel.html'),
@@ -147,7 +159,7 @@ test('custom viewer selects records and dispatches a fixture automation through 
     await orcaPage.getByRole('button', { name: 'Close tab', exact: true }).last().click()
     await orcaPage.getByRole('button', { name: 'New tab', exact: true }).first().click()
     await orcaPage.getByRole('menuitem', { name: 'Selection Viewer', exact: true }).click()
-    await expect(frame.getByLabel('候補A 更新')).toBeVisible()
+    await expect(frame.getByRole('checkbox', { name: '候補A 更新', exact: true })).toBeVisible()
     // Folder workspaces retain their own dataset root and share the group's automation choices.
     await writeFile(
       join(temp, 'folder-items.json'),
@@ -188,7 +200,7 @@ test('custom viewer selects records and dispatches a fixture automation through 
     await orcaPage.getByRole('combobox', { name: 'Automation', exact: true }).click()
     await orcaPage.getByRole('option', { name: 'Viewer fixture', exact: true }).click()
     await orcaPage.getByRole('button', { name: 'Save connection', exact: true }).click()
-    await expect(frame.getByLabel('Folder record')).toBeVisible()
+    await expect(frame.getByRole('checkbox', { name: 'Folder record', exact: true })).toBeVisible()
     await orcaPage.evaluate(async () => {
       await window.api.plugins.setEnabled({
         pluginKey: 'nowly-lab.selection-viewer',
