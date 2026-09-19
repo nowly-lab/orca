@@ -18,7 +18,9 @@ export const CONNECTION = {
 
 export const GRANTS = { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
 
-export const INIT: BridgeHostMessage = {
+/** The init member, not the whole union: an imported binding keeps its declared type, and a
+ *  case reads `INIT.grants` off it. */
+export const INIT: Extract<BridgeHostMessage, { type: 'init' }> = {
   v: BRIDGE_PROTOCOL_VERSION,
   type: 'init',
   sessionId: 'session-a',
