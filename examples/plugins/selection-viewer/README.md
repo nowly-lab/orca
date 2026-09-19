@@ -1,6 +1,6 @@
 # Selection Viewer
 
-Orca のタブ内でローカル JSON を表示し、選択項目とテキストを既存の automation に渡すサンプルです。Web サーバーや Cloudflare への配置は不要です。
+Orca のタブ内でローカル JSON または Markdown チェックリストを表示し、選択項目とテキストを既存の automation に渡すサンプルです。Web サーバーや Cloudflare への配置は不要です。
 
 1. この fork をビルドして起動します。
 2. Settings → Plugins でプラグインを有効にし、Development paths にこのディレクトリを登録します。表示された権限を確認してプラグインを有効化します。
@@ -33,3 +33,11 @@ v1 はローカル Desktop の Git・folder workspace 対応です。SSH と Web
 Folder workspace では同じプロジェクトグループ配下のローカルリポジトリに登録された automation を選べます。データはその Folder workspace 内から読み込みます。
 
 接続後に automation の実行先を変えた場合は、Viewer の接続設定を保存し直してください。受付直後にアプリが終了した場合も自動で再実行せず、復旧後に中断した実行として表示します。時計の修正後も、受付記録を整理済みの古い要求は再実行しません。
+
+
+### Markdown のチェックリスト
+
+接続設定には `NEXT.md` のようなワークスペース内の `.md` / `.markdown` ファイルも指定できます。
+`- [ ]` と `- [x]` の項目を一覧にし、タイトルと各項目の補足・リンクを automation へ渡します。
+コードブロック内の例は対象外です。Viewer のチェックは実行対象の選択で、元ファイルの完了状態は書き換えません。
+Markdown にチェック項目がない場合は接続できません。サンプル画面は先頭100件までを表示します。

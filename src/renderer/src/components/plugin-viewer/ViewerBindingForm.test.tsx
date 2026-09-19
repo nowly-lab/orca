@@ -41,3 +41,35 @@ it('keeps the binding scope fixed, shows save errors and reports a successful co
     automationId: 'a'
   })
 })
+
+it('explains supported files and translates wrapped dataset errors without exposing IPC details', async () => {
+  const configureViewer = vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'plugins:configureViewer': Error: dataset_markdown_no_tasks"
+      )
+    )
+  Object.defineProperty(window, 'api', {
+    configurable: true,
+    value: { plugins: { configureViewer } }
+  })
+  render(
+    <ViewerBindingForm
+      scope={{ workspaceId: 'w', pluginKey: 'p', panelId: 'v' }}
+      settings={{
+        configured: false,
+        datasetRelativePath: 'NEXT.md',
+        automationId: 'a',
+        automations: [{ id: 'a', name: 'Example' }]
+      }}
+      onSaved={vi.fn()}
+    />
+  )
+  expect(screen.getByText(/Markdown.*JSON/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }))
+  const error = await screen.findByRole('alert')
+  expect(error.textContent).toContain('- [ ]')
+  expect(error.textContent).not.toContain('plugins:configureViewer')
+  expect(error.textContent).not.toContain('dataset_markdown_no_tasks')
+})

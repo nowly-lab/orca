@@ -14954,6 +14954,10 @@
     }
   },
   "viewer": {
+    "formatHint": "Markdown のチェックリスト（.md）または Viewer 用 JSON を選んでください。ここでの選択は元ファイルを変更しません。",
+    "noMarkdownTasks": "チェック項目が見つかりません。「- [ ] 項目」を含む Markdown を選んでください。",
+    "invalidJson": "JSON として読み込めません。Markdown のチェックリストは .md ファイルを指定してください。",
+    "invalidShape": "項目は10,000件以内、各 id は空でない128文字以内にしてください。JSON は items の配列を含む形式が必要です。",
     "localOnly": "カスタム Viewer はローカルのデスクトップ版で利用できます。",
     "unavailable": "この Viewer は利用できません。",
     "retry": "再試行",

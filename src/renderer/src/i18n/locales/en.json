@@ -18031,6 +18031,10 @@
     "retry": "Retry"
   },
   "viewer": {
+    "formatHint": "Choose a Markdown checklist (.md) or a Viewer JSON file. Selections do not change the original file.",
+    "noMarkdownTasks": "No checklist items found. Choose Markdown containing - [ ] task items.",
+    "invalidJson": "This file is not valid JSON. For a Markdown checklist, choose a .md file.",
+    "invalidShape": "Use a dataset with at most 10,000 items, each with a nonempty id of at most 128 characters. JSON must contain an items list.",
     "localOnly": "Custom viewers are available on the local desktop only.",
     "unavailable": "This viewer is unavailable.",
     "retry": "Retry",

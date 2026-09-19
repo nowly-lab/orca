@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { translate } from '@/i18n/i18n'
 import type { ViewerScope, ViewerSettings } from '../../../../shared/plugins/viewer-contract'
 
@@ -37,7 +38,7 @@ export function ViewerBindingForm({
       })
       onSaved()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setError(viewerDatasetError(cause))
     } finally {
       setSaving(false)
     }
@@ -59,9 +60,16 @@ export function ViewerBindingForm({
         id={`${id}-path`}
         value={path}
         onChange={(event) => setPath(event.target.value)}
-        placeholder="data/items.json"
+        aria-describedby={`${id}-format`}
+        placeholder="NEXT.md / data/items.json"
         required
       />
+      <p id={`${id}-format`} className="text-xs text-muted-foreground">
+        {translate(
+          'viewer.formatHint',
+          'Choose a Markdown checklist (.md) or a Viewer JSON file. Selections do not change the original file.'
+        )}
+      </p>
       <Label htmlFor={`${id}-automation`}>{translate('viewer.automation', 'Automation')}</Label>
       <Select value={automationId} onValueChange={setAutomationId}>
         <SelectTrigger id={`${id}-automation`}>
@@ -98,4 +106,27 @@ export function ViewerBindingForm({
       </div>
     </form>
   )
+}
+
+function viewerDatasetError(cause: unknown): string {
+  const message = readIpcErrorMessage(cause) ?? String(cause)
+  switch (message) {
+    case 'dataset_markdown_no_tasks':
+      return translate(
+        'viewer.noMarkdownTasks',
+        'No checklist items found. Choose Markdown containing - [ ] task items.'
+      )
+    case 'dataset_invalid_json':
+      return translate(
+        'viewer.invalidJson',
+        'This file is not valid JSON. For a Markdown checklist, choose a .md file.'
+      )
+    case 'dataset_invalid_shape':
+      return translate(
+        'viewer.invalidShape',
+        'Use a dataset with at most 10,000 items, each with a nonempty id of at most 128 characters. JSON must contain an items list.'
+      )
+    default:
+      return message
+  }
 }

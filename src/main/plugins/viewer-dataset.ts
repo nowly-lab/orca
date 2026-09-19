@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { open, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { z } from 'zod'
 import {
   VIEWER_DATA_MAX_BYTES,
@@ -72,9 +72,7 @@ export async function readViewerDataset(binding: {
       throw new Error('data_changed')
     }
     const content = bytes.subarray(0, length)
-    const data = z
-      .object({ items: z.array(viewerItemSchema).max(10000) })
-      .parse(JSON.parse(content.toString('utf8')))
+    const data = await parseDataset(content.toString('utf8'), binding.datasetRelativePath)
     if (new Set(data.items.map((item) => item.id)).size !== data.items.length) {
       throw new Error('duplicate item id')
     }
@@ -139,4 +137,24 @@ export function selectViewerItems(
     }
     return item
   })
+}
+
+async function parseDataset(content: string, path: string): Promise<{ items: ViewerItem[] }> {
+  const extension = extname(path).toLowerCase()
+  let value: unknown
+  if (extension === '.md' || extension === '.markdown') {
+    const { readMarkdownViewerItems } = await import('./viewer-markdown-dataset')
+    value = { items: readMarkdownViewerItems(content) }
+  } else {
+    try {
+      value = JSON.parse(content)
+    } catch {
+      throw new Error('dataset_invalid_json')
+    }
+  }
+  const result = z.object({ items: z.array(viewerItemSchema).max(10000) }).safeParse(value)
+  if (!result.success) {
+    throw new Error('dataset_invalid_shape')
+  }
+  return result.data
 }
