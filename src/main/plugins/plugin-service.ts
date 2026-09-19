@@ -22,9 +22,11 @@ import {
 } from './plugin-discovery'
 import { PluginEventBus } from './plugin-event-bus'
 import { PluginAuditLog } from './plugin-audit-log'
-import { executePluginHostCallRequest } from './plugin-host-call-adapter'
+import { executePluginServiceHostCall } from './plugin-service-host-executor'
 import { PluginContentVerifier } from './plugin-content-integrity'
-import { bindPluginHostServices, type PluginRuntimeDelegate } from './plugin-host-service-bindings'
+import type { ViewerCallContext } from '../../shared/plugins/viewer-contract'
+import type { ViewerHostMethods } from './viewer-host-methods'
+import type { PluginRuntimeDelegate } from './plugin-host-service-bindings'
 import { PluginLogBuffer, type PluginLogLine } from './plugin-log-buffer'
 import { PluginPanelController } from './plugin-panel-controller'
 import { PluginWorkerController } from './plugin-worker-controller'
@@ -56,6 +58,7 @@ export class PluginService {
   private readonly changeListeners = new Set<(event: PluginChangeEvent) => void>()
   private readonly housekeeping = new PluginServiceHousekeeping()
   private discovered: DiscoveredPlugin[] = []
+  viewerHost?: ViewerHostMethods
   private runtimeDelegate: PluginRuntimeDelegate | null = null
   private initPromise: Promise<void> | null = null
   private refreshChain: Promise<void> = Promise.resolve()
@@ -74,8 +77,8 @@ export class PluginService {
         return plugin && this.isRuntimeApproved(plugin) ? plugin : null
       },
       contentVerifier: this.contentVerifier,
-      executeHostCall: (pluginKey, method, params) =>
-        this.executeHostCall(pluginKey, method, params, { viaPanel: true }),
+      executeHostCall: (pluginKey, method, params, viewer) =>
+        this.executeHostCall(pluginKey, method, params, { viaPanel: true, viewer }),
       log: (pluginKey, line) => this.logBuffer.append(pluginKey, 'error', line)
     })
     this.workerController = new PluginWorkerController({
@@ -251,23 +254,19 @@ export class PluginService {
     pluginKey: string,
     method: string,
     params: unknown,
-    options: { viaPanel: boolean }
+    options: { viaPanel: boolean; viewer?: ViewerCallContext }
   ): Promise<PluginPanelActionOutcome> {
-    return executePluginHostCallRequest({
+    return executePluginServiceHostCall({
       pluginKey,
-      request: { method, params },
-      viaPanel: options.viaPanel,
-      resolvePolicy: (boundPluginKey) => ({
-        grantedCapabilities: this.getGrantedCapabilities(boundPluginKey),
-        services: this.runtimeDelegate
-          ? bindPluginHostServices({
-              delegate: this.runtimeDelegate,
-              pluginsDataDir: getPluginsDataDir(this.options.userDataPath),
-              subscribeEvents: (key, events) => this.eventBus.subscribe(key, events)
-            })
-          : null,
-        audit: this.audit
-      })
+      method,
+      params,
+      options,
+      delegate: this.runtimeDelegate,
+      viewerHost: this.viewerHost,
+      pluginsDataDir: getPluginsDataDir(this.options.userDataPath),
+      audit: this.audit,
+      getCapabilities: (key) => this.getGrantedCapabilities(key),
+      subscribeEvents: (key, events) => this.eventBus.subscribe(key, events)
     })
   }
 

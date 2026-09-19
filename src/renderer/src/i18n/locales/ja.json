@@ -14952,5 +14952,27 @@
       "stopped": "停止",
       "finished": "完了"
     }
+  },
+  "viewer": {
+    "localOnly": "カスタム Viewer はローカルのデスクトップ版で利用できます。",
+    "unavailable": "この Viewer は利用できません。",
+    "retry": "再試行",
+    "loading": "Viewer を読み込み中…",
+    "configure": "データと automation を接続",
+    "connection": "接続設定",
+    "dataset": "データファイル（このワークスペースからの相対パス）",
+    "automation": "Automation",
+    "chooseAutomation": "Automation を選択",
+    "noAutomations": "先にこのプロジェクトでローカルの automation を作成してください。",
+    "replaceNotice": "接続の保存やプラグインの再読込で、未送信の入力は消えます。",
+    "save": "接続を保存",
+    "ended": "実行終了",
+    "failed": "起動失敗",
+    "skipped": "実行スキップ",
+    "started": "起動済み",
+    "pruned": "履歴の保存期間が終了しました",
+    "pending": "受付処理中",
+    "history": "最近の実行 — 実行終了は、処理内容の成功を保証しません。",
+    "truncated": "出力を省略しています。詳細は実行履歴を開いてください。"
   }
 }

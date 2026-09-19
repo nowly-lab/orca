@@ -138,6 +138,16 @@ export class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWithPtyForeg
     )
   }
 
+  dispatchViewerAutomation(
+    automation: Automation,
+    run: AutomationRun,
+    expectedOwner: AutomationOwnerPrecondition
+  ): Promise<AutomationRun> {
+    return this.automation.withExternalProbePriority(() =>
+      this.automation.dispatchViewerRun(automation, run, expectedOwner)
+    )
+  }
+
   listAutomationsForScope(params = {}): AutomationListResult {
     return this.automation.withExternalProbePriority(() => this.automation.listForScope(params))
   }

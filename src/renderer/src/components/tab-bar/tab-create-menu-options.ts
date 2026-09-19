@@ -1,3 +1,5 @@
+import { buildViewerTabMenuOptions } from './viewer-tab-menu'
+import type { ActivePluginPanel } from '@/store/plugin-panels'
 import { translate } from '@/i18n/i18n'
 import { normalizeMatchQuery, scoreQueryTokens } from './query-token-match'
 import type { BuiltInWindowsTerminalShell } from '../../../../shared/windows-terminal-shell'
@@ -11,16 +13,19 @@ export type TabCreateMenuOptionKind =
   | 'new-terminal'
   | 'new-terminal-shell'
   | 'open-markdown'
+  | 'plugin-viewer'
 
 export type TabCreateMenuOption = {
   id: string
   kind: TabCreateMenuOptionKind
   keywords: readonly string[]
   label: string
+  viewer?: { pluginKey: string; panelId: string }
   shell?: BuiltInWindowsTerminalShell
 }
 
 export type TabCreateMenuOptionsContext = {
+  viewerPanels?: ActivePluginPanel[]
   hasNewBrowser: boolean
   hasNewMarkdown: boolean
   hasOpenMarkdown: boolean
@@ -65,7 +70,7 @@ export function buildTabCreateMenuOptions(
     return []
   }
 
-  const options: TabCreateMenuOption[] = []
+  const options = buildViewerTabMenuOptions(context.viewerPanels ?? [], context.terminalOnly)
 
   if (context.windowsShellEntries && context.windowsShellEntries.length > 0) {
     for (const entry of context.windowsShellEntries) {

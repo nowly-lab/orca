@@ -1,3 +1,4 @@
+import { dispatchViewerRunFenced } from '../automations/viewer-dispatch-fence'
 import type { AutomationService } from '../automations/service'
 import type {
   Automation,
@@ -216,6 +217,14 @@ export class RuntimeAutomationController {
         })
       }
     })
+  }
+
+  async dispatchViewerRun(
+    automation: Automation,
+    run: AutomationRun,
+    expectedOwner: AutomationOwnerPrecondition
+  ): Promise<AutomationRun> {
+    return dispatchViewerRunFenced(this.store, this.service, automation, run, expectedOwner)
   }
 
   private copyPatchValues(

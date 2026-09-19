@@ -24,6 +24,7 @@ import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-br
 import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { resolveClientHostedBrowserRowStripGroupId } from '../tab-bar/client-hosted-browser-row-strip-placement'
 
+const PluginViewerPane = lazy(() => import('../plugin-viewer/PluginViewerPane'))
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
 const EMPTY_CLIENT_HOSTED_ROWS: readonly ClientHostedBrowserRow[] = []
@@ -340,6 +341,23 @@ export default function TabGroupPanel({
         className="relative flex-1 min-h-0 overflow-hidden"
         style={bodyAnchorStyle}
       >
+        {model.groupTabs
+          .filter((tab) => tab.contentType === 'plugin-viewer')
+          .map((tab) => (
+            <div
+              key={tab.id}
+              hidden={tab.id !== activeTab?.id}
+              className="absolute inset-0 flex min-h-0 min-w-0"
+            >
+              <Suspense fallback={null}>
+                <PluginViewerPane
+                  entityId={tab.entityId}
+                  workspaceId={worktreeId}
+                  isVisible={isVisible && tab.id === activeTab?.id}
+                />
+              </Suspense>
+            </div>
+          ))}
         {/* Why: empty anchor so the agent-sessions tour reads as a terminal-area tip, not toolbar chrome. */}
         {isFocused ? (
           <div
@@ -351,7 +369,8 @@ export default function TabGroupPanel({
           activeTab.contentType !== 'terminal' &&
           activeTab.contentType !== 'agent-session' &&
           activeTab.contentType !== 'browser' &&
-          activeTab.contentType !== 'simulator' && (
+          activeTab.contentType !== 'simulator' &&
+          activeTab.contentType !== 'plugin-viewer' && (
             <div className="absolute inset-0 flex min-h-0 min-w-0">
               {/* Why: split groups render editor content in a plain relative pane body, not the legacy Terminal.tsx flex column. */}
               <Suspense

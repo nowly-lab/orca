@@ -1,0 +1,30 @@
+{
+  "id": "selection-viewer",
+  "name": "Selection Viewer",
+  "version": "0.1.0",
+  "publisher": "nowly-lab",
+  "engines": {
+    "orca": ">=0.0.0"
+  },
+  "pluginApi": 1,
+  "capabilities": [
+    {
+      "kind": "viewer:read"
+    },
+    {
+      "kind": "automation:run"
+    }
+  ],
+  "contributes": {
+    "panels": [
+      {
+        "id": "selection",
+        "title": "Selection Viewer",
+        "icon": "list-checks",
+        "entry": "panel.html",
+        "placement": "tab"
+      }
+    ]
+  },
+  "manifestVersion": 1
+}

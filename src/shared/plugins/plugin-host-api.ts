@@ -1,3 +1,12 @@
+import {
+  viewerContextResultSchema,
+  viewerDatasetPageSchema,
+  viewerDispatchInputSchema,
+  viewerPageParamsSchema,
+  viewerReceiptSchema,
+  viewerRunsParamsSchema,
+  viewerRunsResultSchema
+} from './viewer-contract'
 import { z } from 'zod'
 import { PLUGIN_EVENT_NAMES } from './plugin-manifest'
 import type { PluginCapabilityKind } from './plugin-capabilities'
@@ -100,7 +109,13 @@ export type PluginHostMethodSpec = {
   /** pluginApi minor the method appeared in (`1.0` for the v0 set). */
   since: string
   /** Machine-readable resource boundary enforced by the host binding. */
-  scope: 'active-worktree' | 'explicit-terminal' | 'plugin-private' | 'desktop' | 'host-events'
+  scope:
+    | 'active-worktree'
+    | 'explicit-terminal'
+    | 'plugin-private'
+    | 'desktop'
+    | 'host-events'
+    | 'viewer-session'
   stability: 'experimental'
   capability: PluginCapabilityKind
   /** Mutations are audit-logged with actor `plugin:<id>`. */
@@ -120,6 +135,46 @@ const spec = <P extends z.ZodTypeAny, R extends z.ZodTypeAny>(
 ): PluginHostMethodSpec => ({ ...entry, stability: 'experimental' })
 
 export const PLUGIN_HOST_API_V0: readonly PluginHostMethodSpec[] = [
+  spec({
+    name: 'viewer.context',
+    since: '1.0',
+    scope: 'viewer-session',
+    capability: 'viewer:read',
+    mutation: false,
+    panel: true,
+    params: workspaceReadContextParams,
+    result: viewerContextResultSchema
+  }),
+  spec({
+    name: 'viewer.data',
+    since: '1.0',
+    scope: 'viewer-session',
+    capability: 'viewer:read',
+    mutation: false,
+    panel: true,
+    params: viewerPageParamsSchema,
+    result: viewerDatasetPageSchema
+  }),
+  spec({
+    name: 'viewer.dispatch',
+    since: '1.0',
+    scope: 'viewer-session',
+    capability: 'automation:run',
+    mutation: true,
+    panel: true,
+    params: viewerDispatchInputSchema,
+    result: viewerReceiptSchema
+  }),
+  spec({
+    name: 'viewer.runs',
+    since: '1.0',
+    scope: 'viewer-session',
+    capability: 'viewer:read',
+    mutation: false,
+    panel: true,
+    params: viewerRunsParamsSchema,
+    result: viewerRunsResultSchema
+  }),
   spec({
     name: 'workspace.readContext',
     since: '1.0',

@@ -1,3 +1,4 @@
+import type { ViewerScope, ViewerSettings } from '../../shared/plugins/viewer-contract'
 import type {
   PluginPanelActionOutcome,
   PluginPanelEntry
@@ -14,6 +15,7 @@ export type PluginHostPanel = {
   title: string
   /** Lucide icon name declared in the plugin manifest. */
   icon?: string
+  placement?: 'sidebar' | 'tab'
   tabKey: `plugin:${string}`
 }
 
@@ -141,6 +143,10 @@ export type PluginMarketplaceHostInstallPreview = {
 }
 
 export type PluginsApi = {
+  viewerSettings: (scope: ViewerScope) => Promise<ViewerSettings>
+  configureViewer: (
+    input: ViewerScope & { datasetRelativePath: string; automationId: string }
+  ) => Promise<{ configured: boolean }>
   list: () => Promise<PluginHostListEntry[]>
   listLanguagePacks: () => Promise<PluginLanguagePackRegistration[]>
   /** Records the consent-dialog answer; approval is keyed to the plugin's
@@ -149,7 +155,11 @@ export type PluginsApi = {
   setEnabled: (args: { pluginKey: string; enabled: boolean }) => Promise<PluginHostListEntry[]>
   /** Returns the panel's CSP-wrapped HTML, or null when the plugin or
    *  panel is missing/disabled. Rendered only inside a sandboxed iframe. */
-  readPanelEntry: (args: { pluginKey: string; panelId: string }) => Promise<PluginPanelEntry | null>
+  readPanelEntry: (args: {
+    pluginKey: string
+    panelId: string
+    workspaceId?: string
+  }) => Promise<PluginPanelEntry | null>
   invokeCommand: (args: {
     pluginKey: string
     commandId: string

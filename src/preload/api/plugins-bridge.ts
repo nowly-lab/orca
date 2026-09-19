@@ -14,6 +14,8 @@ import type {
 } from '../api-types'
 
 export const pluginsApi = {
+  viewerSettings: (args) => ipcRenderer.invoke('plugins:viewerSettings', args),
+  configureViewer: (args) => ipcRenderer.invoke('plugins:configureViewer', args),
   list: (): Promise<PluginHostListEntry[]> => ipcRenderer.invoke('plugins:list'),
   listLanguagePacks: () => ipcRenderer.invoke('plugins:listLanguagePacks'),
   consent: (args: PluginConsentRequest): Promise<PluginHostListEntry[]> =>
@@ -23,6 +25,7 @@ export const pluginsApi = {
   readPanelEntry: (args: {
     pluginKey: string
     panelId: string
+    workspaceId?: string
   }): Promise<PluginPanelEntry | null> => ipcRenderer.invoke('plugins:readPanelEntry', args),
   invokeCommand: (args: { pluginKey: string; commandId: string; args?: unknown }) =>
     ipcRenderer.invoke('plugins:invokeCommand', args),

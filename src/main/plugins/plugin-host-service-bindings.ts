@@ -34,11 +34,13 @@ export type PluginRuntimeDelegate = {
 
 export function bindPluginHostServices(input: {
   delegate: PluginRuntimeDelegate
+  viewer?: PluginHostServices['viewer']
   pluginsDataDir: string
   subscribeEvents: (pluginKey: string, events: PluginEventName[]) => PluginEventName[]
 }): PluginHostServices {
   const { delegate, pluginsDataDir, subscribeEvents } = input
   return {
+    viewer: input.viewer,
     resolveActiveWorktreeContext: async () => {
       const context = await delegate.resolveActiveWorktreeContext()
       if (!context) {

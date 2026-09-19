@@ -40,6 +40,7 @@ export type TabBarItem =
       isPinned: boolean
       data: Tab
     }
+  | { type: 'plugin-viewer'; id: string; unifiedTabId: string; isPinned: boolean; data: Tab }
   | {
       type: 'agent-session'
       id: string
@@ -55,7 +56,7 @@ export function getTabDragLabel(item: TabBarItem, generatedTitlesEnabled: boolea
   if (item.type === 'browser') {
     return getBrowserTabLabel(item.data)
   }
-  if (item.type === 'simulator' || item.type === 'agent-session') {
+  if (item.type === 'simulator' || item.type === 'plugin-viewer' || item.type === 'agent-session') {
     return item.data.label || 'Mobile Emulator'
   }
   return getEditorDisplayLabel(item.data)
@@ -130,7 +131,12 @@ export function buildOrderedTabItems({
     terminalIds,
     editorFileIds,
     browserTabIds,
-    simulatorTabIds,
+    [
+      ...simulatorTabIds,
+      ...[...unifiedTabByVisibleId.values()]
+        .filter((tab) => tab.contentType === 'plugin-viewer')
+        .map((tab) => tab.id)
+    ],
     agentSessionTabIds
   )
   const items: TabBarItem[] = []
@@ -172,9 +178,12 @@ export function buildOrderedTabItems({
       continue
     }
     const simulatorTab = unifiedTabByVisibleId.get(id)
-    if (simulatorTab?.contentType === 'simulator') {
+    if (
+      simulatorTab?.contentType === 'simulator' ||
+      simulatorTab?.contentType === 'plugin-viewer'
+    ) {
       items.push({
-        type: 'simulator',
+        type: simulatorTab.contentType,
         id,
         unifiedTabId: simulatorTab.id,
         isPinned: simulatorTab.isPinned === true,

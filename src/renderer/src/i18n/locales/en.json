@@ -18029,5 +18029,27 @@
   },
   "common": {
     "retry": "Retry"
+  },
+  "viewer": {
+    "localOnly": "Custom viewers are available on the local desktop only.",
+    "unavailable": "This viewer is unavailable.",
+    "retry": "Retry",
+    "loading": "Loading viewer…",
+    "configure": "Connect a dataset and automation",
+    "connection": "Connection",
+    "dataset": "Dataset file (relative to this workspace)",
+    "automation": "Automation",
+    "chooseAutomation": "Choose an automation",
+    "noAutomations": "Create a local automation in this project first.",
+    "replaceNotice": "Saving a connection or reloading the plugin clears unsent form input.",
+    "save": "Save connection",
+    "ended": "Execution ended",
+    "failed": "Failed to start",
+    "skipped": "Skipped",
+    "started": "Started",
+    "pruned": "History no longer retained",
+    "pending": "Pending",
+    "history": "Recent runs — execution ending does not confirm task success.",
+    "truncated": "Output shortened. Open the run for details."
   }
 }

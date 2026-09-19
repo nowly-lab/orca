@@ -1,3 +1,4 @@
+import { shouldRunAutomationPrecheck } from '../../shared/automation-precheck'
 import type { WebContents } from 'electron'
 
 /** All the service asks of the renderer: is it still there, and take this message. Narrower
@@ -147,6 +148,13 @@ export class AutomationService {
     return await this.requestDispatch(automation, run, this.resolveTarget(automation))
   }
 
+  async dispatchViewerRun(automation: Automation, run: AutomationRun): Promise<AutomationRun> {
+    if (!run.viewer || run.automationId !== automation.id || run.status !== 'pending') {
+      throw new Error('invalid_viewer_run')
+    }
+    return this.requestDispatch(automation, run, this.resolveTarget(automation))
+  }
+
   /** The run-history row doc:94 pairs with the typed refusal an execute fence throws. */
   recordRefusedRun(automationId: string): void {
     const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
@@ -169,7 +177,7 @@ export class AutomationService {
     if (!run) {
       throw new Error('Automation run not found.')
     }
-    if (run.trigger !== 'scheduled' || !automation.precheck) {
+    if (!shouldRunAutomationPrecheck(run) || !automation.precheck) {
       return null
     }
     const target = this.resolveTarget(automation)

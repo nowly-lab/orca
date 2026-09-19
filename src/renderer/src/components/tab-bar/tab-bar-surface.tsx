@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
@@ -267,6 +268,18 @@ export function renderTabBarSurface({
               }
             />
           ) : null}
+          {showStaticCreateMenuItems && !terminalOnly
+            ? createMenuOptions
+                .filter((option) => option.kind === 'plugin-viewer')
+                .map((option) => (
+                  <DropdownMenuItem
+                    key={option.id}
+                    onSelect={() => handleSelectCreateMenuOption(option)}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))
+            : null}
           {showStaticCreateMenuItems && showAgentLaunchItems ? (
             <>
               <DropdownMenuSeparator />

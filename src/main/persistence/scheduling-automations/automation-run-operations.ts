@@ -68,12 +68,13 @@ export function createAutomationRun(
   operations: AutomationRunOperations,
   automation: Automation,
   scheduledFor: number,
-  trigger: AutomationRunTrigger = 'scheduled'
+  trigger: AutomationRunTrigger = 'scheduled',
+  viewerRun?: Pick<AutomationRun, 'id' | 'viewer'>
 ): AutomationRun {
   const existing = (operations.state.automationRuns ?? []).find(
-    (run) => run.automationId === automation.id && run.scheduledFor === scheduledFor
+    (run) => !run.viewer && run.automationId === automation.id && run.scheduledFor === scheduledFor
   )
-  if (existing) {
+  if (existing && !viewerRun) {
     return existing
   }
   const now = Date.now()
@@ -82,7 +83,8 @@ export function createAutomationRun(
     (operations.state.automationRuns ?? []).filter((run) => run.automationId === automation.id)
   )
   const run: AutomationRun = {
-    id: randomUUID(),
+    id: viewerRun?.id ?? randomUUID(),
+    ...(viewerRun?.viewer ? { viewer: viewerRun.viewer } : {}),
     automationId: automation.id,
     runNumber,
     runContext: automation.runContext ?? null,

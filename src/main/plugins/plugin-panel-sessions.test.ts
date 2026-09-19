@@ -9,6 +9,24 @@ const binding = {
 }
 
 describe('PluginPanelSessions', () => {
+  it('keeps workspace identity fixed and rotates on binding revision changes', () => {
+    const sessions = new PluginPanelSessions()
+    const viewer = {
+      scope: { workspaceId: 'a', pluginKey: binding.pluginKey, panelId: binding.panelId },
+      bindingRevision: 'one'
+    }
+    const token = sessions.issue('renderer:1', { ...binding, viewer })
+    const other = sessions.issue('renderer:1', {
+      ...binding,
+      viewer: { ...viewer, scope: { ...viewer.scope, workspaceId: 'b' } }
+    })
+    expect(other).not.toBe(token)
+    expect(sessions.resolve('renderer:1', token)?.viewer?.scope.workspaceId).toBe('a')
+    expect(
+      sessions.issue('renderer:1', { ...binding, viewer: { ...viewer, bindingRevision: 'two' } })
+    ).not.toBe(token)
+    expect(sessions.resolve('renderer:2', token)).toBeNull()
+  })
   it('binds an opaque token to its transport owner and panel revision', () => {
     const sessions = new PluginPanelSessions()
     const token = sessions.issue('renderer:1', binding)

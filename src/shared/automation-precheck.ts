@@ -1,4 +1,8 @@
-import type { AutomationPrecheck, AutomationPrecheckResult } from './automations-types'
+import type {
+  AutomationPrecheck,
+  AutomationPrecheckResult,
+  AutomationRun
+} from './automations-types'
 
 export const DEFAULT_AUTOMATION_PRECHECK_TIMEOUT_SECONDS = 60
 export const MAX_AUTOMATION_PRECHECK_TIMEOUT_SECONDS = 600
@@ -44,4 +48,10 @@ export function formatAutomationPrecheckFailure(result: AutomationPrecheckResult
     return `Precheck failed: ${result.error}`
   }
   return `Precheck exited with code ${result.exitCode ?? 'unknown'}.`
+}
+
+export function shouldRunAutomationPrecheck(
+  run: Pick<AutomationRun, 'trigger' | 'viewer'>
+): boolean {
+  return run.trigger === 'scheduled' || Boolean(run.viewer)
 }

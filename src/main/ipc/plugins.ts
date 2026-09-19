@@ -1,3 +1,4 @@
+import { registerPluginViewerHandlers } from './plugin-viewers'
 import { ipcMain } from 'electron'
 import { z } from 'zod'
 import type { Store } from '../persistence'
@@ -39,7 +40,8 @@ const setEnabledArgsSchema = z.object({
 
 const readPanelEntryArgsSchema = z.object({
   pluginKey: z.string().min(1),
-  panelId: z.string().min(1)
+  panelId: z.string().min(1),
+  workspaceId: z.string().min(1).optional()
 })
 
 const invokeCommandArgsSchema = z.object({
@@ -99,6 +101,8 @@ export function registerPluginHandlers(
     pluginService.setRuntimeDelegate(runtime)
   }
 
+  const viewerContext = runtime ? registerPluginViewerHandlers(store, pluginService, runtime) : null
+
   store.onSettingsChanged((updates) => {
     if ('pluginSystemEnabled' in updates || 'devPluginPaths' in updates) {
       // Main owns plugin lifecycle. Renderer follow-up refreshes are UX only;
@@ -154,7 +158,22 @@ export function registerPluginHandlers(
       )
       await pluginService.whenReady()
       const parsed = readPanelEntryArgsSchema.parse(args)
-      const entry = await pluginService.panels.open(ownerKey, parsed.pluginKey, parsed.panelId)
+      const viewer = parsed.workspaceId
+        ? await viewerContext?.({
+            workspaceId: parsed.workspaceId,
+            pluginKey: parsed.pluginKey,
+            panelId: parsed.panelId
+          })
+        : undefined
+      if (parsed.workspaceId && !viewer) {
+        throw new Error('unsupported_viewer_host')
+      }
+      const entry = await pluginService.panels.open(
+        ownerKey,
+        parsed.pluginKey,
+        parsed.panelId,
+        viewer
+      )
       if (!ownerLease.isCurrent()) {
         pluginService.panels.revokeOwner(ownerKey)
         return null

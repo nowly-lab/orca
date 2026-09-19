@@ -83,6 +83,7 @@ export const viewerRunsResultSchema = z.object({
   runs: z.array(
     z.object({
       runId: z.string(),
+      automationId: z.string().nullable(),
       status: z.string(),
       error: z.string().nullable(),
       output: z.string().nullable(),

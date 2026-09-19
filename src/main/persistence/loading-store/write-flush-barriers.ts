@@ -39,6 +39,15 @@ export class WriteFlushBarrierOperations {
     this[writeFlushBarrierOperationsContext] = { runtime, writes }
   }
 
+  flushOrThrow(): void {
+    const { runtime, writes } = this[writeFlushBarrierOperationsContext]
+    if (runtime.quitFlushStarted || runtime.writesFrozen) {
+      throw new Error('Persistence is finalized')
+    }
+    runtime.automationListProjectionCache = null
+    writes.flushOrThrow()
+  }
+
   flush(): void {
     this[writeFlushBarrierOperationsContext].runtime.automationListProjectionCache = null
     if (this[writeFlushBarrierOperationsContext].runtime.quitFlushStarted) {
