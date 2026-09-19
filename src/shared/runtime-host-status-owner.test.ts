@@ -72,6 +72,26 @@ it('uses ready transitions, not diagnostic updates or a healthy polling timer', 
   expect(request).toHaveBeenCalledTimes(3)
 })
 
+it('exposes verified status as reusable evidence only until transport changes', async () => {
+  const { owner } = createOwner(true)
+  owner.connectionChanged('ready')
+  await owner.refresh()
+  expect(owner.readVerifiedResponse()).toMatchObject({
+    ok: true,
+    result: { runtimeId: 'host-1' }
+  })
+  owner.connectionChanged('disconnected')
+  expect(owner.readVerifiedResponse()).toBeNull()
+})
+
+it('invalidates passive evidence when the transport becomes ready', async () => {
+  const { owner } = createOwner()
+  await owner.refresh({ observeOnly: true })
+  expect(owner.readVerifiedResponse()).toMatchObject({ ok: true })
+  owner.connectionChanged('ready')
+  expect(owner.readVerifiedResponse()).toBeNull()
+})
+
 it('retries a failed status operation while retaining healthy transport and last good metadata', async () => {
   const { owner, request } = createOwner(true)
   owner.connectionChanged('ready')

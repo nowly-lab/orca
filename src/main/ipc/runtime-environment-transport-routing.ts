@@ -7,6 +7,7 @@ import type {
   RuntimeRpcResponse
 } from '../../shared/runtime-rpc-envelope'
 import type { RuntimeStatus } from '../../shared/runtime-types'
+import { runtimeAdvertisesBrowserClientHosting } from '../../shared/browser-client-hosting-eligibility'
 import {
   subscribeRemoteRuntimeRequest,
   type RemoteRuntimeSubscription
@@ -60,6 +61,22 @@ export async function getRuntimeEnvironmentStatus(
     withTailscaleHintForResponse(response, getPreferredPairingOffer(environment).endpoint),
     environment.id
   )
+}
+
+/** Read placement compatibility from verified evidence, probing after transport invalidation. */
+export async function getRuntimeEnvironmentStatusForBrowserPlacement(
+  userDataPath: string,
+  selector: string
+): Promise<RuntimeRpcResponse<RuntimeStatus>> {
+  const cached = getRuntimeEnvironmentStatusOwner(userDataPath, selector).readVerifiedResponse()
+  if (
+    cached &&
+    cached.result.graphStatus === 'ready' &&
+    runtimeAdvertisesBrowserClientHosting(cached.result.capabilities)
+  ) {
+    return cached
+  }
+  return await getRuntimeEnvironmentStatus(userDataPath, selector, undefined, { observeOnly: true })
 }
 
 export async function callRuntimeEnvironment(

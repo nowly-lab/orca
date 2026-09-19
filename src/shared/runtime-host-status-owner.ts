@@ -56,6 +56,14 @@ export class RuntimeHostStatusOwner {
     return this.snapshot
   }
 
+  /** Return status evidence only while the current connection incarnation has verified the host. */
+  readVerifiedResponse(): Extract<RuntimeHostStatusResponse, { ok: true }> | null {
+    if (this.disposed || this.snapshot.verification !== 'verified' || !this.response.ok) {
+      return null
+    }
+    return this.response
+  }
+
   activate(): void {
     if (this.active || this.disposed) {
       return
@@ -149,9 +157,11 @@ export class RuntimeHostStatusOwner {
         this.update({ verification: 'unavailable' })
       }
     }
-    if (transport === 'ready' && this.snapshot.verification !== 'blocked') {
+    if (transport === 'ready' && previous !== 'ready' && this.snapshot.verification !== 'blocked') {
       // A pre-reconnect answer cannot verify the new socket's runtime.
       this.retireRequest()
+      this.clearRetry()
+      this.update({ verification: 'unavailable' })
       if (this.active || this.waiters.size > 0) {
         this.startRequest()
       }
