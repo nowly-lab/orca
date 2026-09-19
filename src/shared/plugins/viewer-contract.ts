@@ -19,6 +19,7 @@ export type ViewerBinding = ViewerScope & {
   workspaceRoot: string
   datasetRelativePath: string
   automationId: string
+  automationTargetKey?: string
   projectName: string
   automationName: string
   expectedOwner: AutomationOwnerPrecondition

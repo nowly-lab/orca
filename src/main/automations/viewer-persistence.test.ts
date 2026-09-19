@@ -1,3 +1,5 @@
+import { viewerAutomationTargetKey } from './viewer-automation-target'
+import { AutomationService } from './service'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,6 +12,7 @@ import type { ViewerBinding } from '../../shared/plugins/viewer-contract'
 import type { Store } from '../persistence'
 const dirs: string[] = []
 afterEach(() => {
+  vi.useRealTimers()
   for (const dir of dirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -45,6 +48,7 @@ it('retains the receipt, provenance and immutable input after a real store reloa
     workspaceRoot: dir,
     datasetRelativePath: 'items.json',
     automationId: automation.id,
+    automationTargetKey: viewerAutomationTargetKey(automation),
     expectedOwner: { selector: { kind: 'self' } },
     projectName: 'Fixture',
     automationName: automation.name
@@ -84,4 +88,34 @@ it('retains the receipt, provenance and immutable input after a real store reloa
     replayed: true
   })
   expect(dispatch).toHaveBeenCalledTimes(1)
+  // A crash after durable admission leaves pending input; recovery must close it without launching again.
+  const observeCompletion = vi.fn(async () => ({ status: 'completed' as const }))
+  const service = new AutomationService(second, {
+    terminalObserver: { resolveRunTerminal: () => null, observeCompletion }
+  })
+  vi.useFakeTimers()
+  service.start()
+  service.setRendererReady()
+  await vi.advanceTimersByTimeAsync(121000)
+  service.stop()
+  expect(second.listAutomationRuns()[0].status).toBe('dispatch_failed')
+  expect(second.listAutomationRuns()[0].error).toContain('not automatically retried')
+  expect(observeCompletion).not.toHaveBeenCalled()
+  expect(await createRunner(second).dispatch(binding, input)).toMatchObject({
+    runId: accepted.runId,
+    replayed: true
+  })
+  expect(dispatch).toHaveBeenCalledTimes(1)
+  const future = Date.now() + 86400001
+  vi.setSystemTime(future)
+  await createRunner(second).dispatch(binding, {
+    ...input,
+    requestId: 'future',
+    requestedAt: future
+  })
+  second.flushOrThrow()
+  const third = new persistence.Store()
+  vi.setSystemTime(input.requestedAt)
+  await expect(createRunner(third).dispatch(binding, input)).rejects.toThrow('request_expired')
+  expect(dispatch).toHaveBeenCalledTimes(2)
 })

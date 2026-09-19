@@ -20,6 +20,7 @@ it('persists workspace-scoped bindings and changes revision on edit', () => {
     workspaceRoot: dir,
     datasetRelativePath: 'data.json',
     automationId: 'a',
+    automationTargetKey: 'target',
     projectName: 'P',
     automationName: 'A',
     expectedOwner: { selector: { kind: 'self' as const } }

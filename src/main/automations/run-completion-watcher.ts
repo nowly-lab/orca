@@ -24,6 +24,9 @@ export type AutomationRunTerminalObserver = {
 
 /** Truthful reason for a run this authority can no longer observe; never claims completion. */
 export function describeStrandedAutomationRun(run: AutomationRun): string {
+  if (run.status === 'pending' && run.viewer) {
+    return 'Orca stopped after accepting this viewer request. It was not automatically retried.'
+  }
   if (run.status === 'dispatching') {
     return 'Orca stopped before this run reported that its agent started.'
   }
@@ -139,7 +142,12 @@ export class AutomationRunCompletionWatcher {
    *  reported ready and still cannot find it. */
   reconcileRetainedRuns(runs: readonly AutomationRun[]): void {
     this.reconciler.reconcile(
-      runs.filter((run) => run.status === 'dispatched' || run.status === 'dispatching')
+      runs.filter(
+        (run) =>
+          run.status === 'dispatched' ||
+          run.status === 'dispatching' ||
+          (run.status === 'pending' && Boolean(run.viewer))
+      )
     )
   }
 

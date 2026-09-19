@@ -27,7 +27,11 @@ export function createViewerInvocation(
     }
     return { receipt: previous, replayed: true }
   }
-  if (Math.abs(now - input.requestedAt) > 5 * 60 * 1000) {
+  const oldExpiredBefore = operations.state.viewerInvocationExpiredBefore
+  if (
+    input.requestedAt <= (oldExpiredBefore ?? -1) ||
+    Math.abs(now - input.requestedAt) > 5 * 60 * 1000
+  ) {
     throw new Error('request_expired')
   }
   const oldRuns = operations.state.automationRuns
@@ -37,6 +41,17 @@ export function createViewerInvocation(
       now - receipt.createdAt < 86400000 ||
       oldRuns.some((run) => run.id === receipt.runId && !isFinalAutomationRunStatus(run.status))
   )
+  const retainedKeys = new Set(retained.map((receipt) => receipt.key))
+  // A receipt could have been requested up to five minutes ahead of admission.
+  // Never accept timestamps covered by a collected receipt after a clock rollback.
+  const expiredBefore = receipts.reduce(
+    (floor, receipt) =>
+      retainedKeys.has(receipt.key) ? floor : Math.max(floor, receipt.createdAt + 300000),
+    oldExpiredBefore ?? -1
+  )
+  if (input.requestedAt <= expiredBefore) {
+    throw new Error('request_expired')
+  }
   if (retained.length >= 10000) {
     throw new Error('viewer request capacity reached')
   }
@@ -55,11 +70,13 @@ export function createViewerInvocation(
       { id: input.runId, viewer: input.viewer }
     )
     operations.state.viewerInvocations = [...retained, receipt]
+    operations.state.viewerInvocationExpiredBefore = expiredBefore
     operations.flush()
   } catch (error) {
     operations.state.automationRuns = oldRuns
     operations.state.automations = oldAutomations
     operations.state.viewerInvocations = receipts
+    operations.state.viewerInvocationExpiredBefore = oldExpiredBefore
     throw error
   }
   operations.recordManualRun()

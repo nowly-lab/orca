@@ -1,3 +1,4 @@
+import { viewerAutomationTargetKey } from '../automations/viewer-automation-target'
 import { resolveViewerWorkspaceProject } from '../plugins/viewer-workspace-project'
 import { ipcMain } from 'electron'
 import { join } from 'node:path'
@@ -106,7 +107,7 @@ export function registerPluginViewerHandlers(
       datasetRelativePath: binding?.datasetRelativePath ?? '',
       automationId: binding?.automationId ?? '',
       automations: automations.map((automation) => ({ id: automation.id, name: automation.name })),
-      configured: Boolean(binding)
+      configured: Boolean(binding?.automationTargetKey)
     }
   })
   ipcMain.handle('plugins:configureViewer', async (_event, raw: unknown) => {
@@ -132,6 +133,7 @@ export function registerPluginViewerHandlers(
       workspaceRoot: root,
       datasetRelativePath: args.datasetRelativePath,
       automationId: automation.id,
+      automationTargetKey: viewerAutomationTargetKey(automation),
       expectedOwner,
       projectName,
       automationName: automation.name
@@ -141,6 +143,9 @@ export function registerPluginViewerHandlers(
     const current = runtime.showAutomation(args.automationId, expectedOwner)
     if (!repoIds.includes(current.projectId)) {
       throw new Error('automation_project_changed')
+    }
+    if (viewerAutomationTargetKey(current) !== binding.automationTargetKey) {
+      throw new Error('automation_target_changed')
     }
     bindings.put(binding)
     return { configured: true }

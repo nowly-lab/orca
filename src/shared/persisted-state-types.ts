@@ -111,6 +111,8 @@ export type PersistedState = {
   automations: Automation[]
   automationRuns: AutomationRun[]
   viewerInvocations?: ViewerInvocationReceipt[]
+  /** Retired request timestamps stay retired across clock corrections and restarts. */
+  viewerInvocationExpiredBefore?: number
   onboarding: OnboardingState
   /** Main-owned telemetry de-dupe marker; never exposed through PersistedUIState. */
   featureInteractionTelemetryBuckets?: FeatureInteractionTelemetryBucketState

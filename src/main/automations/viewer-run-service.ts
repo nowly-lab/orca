@@ -1,3 +1,4 @@
+import { viewerAutomationTargetKey } from './viewer-automation-target'
 import { createHash, randomUUID } from 'node:crypto'
 import type { Automation, AutomationRun } from '../../shared/automations-types'
 import {
@@ -71,6 +72,9 @@ export class ViewerRunService {
     }
     // Revalidate after file I/O, before the synchronous durable acceptance.
     const automation = await deps.validate(binding)
+    if (binding.automationTargetKey !== viewerAutomationTargetKey(automation)) {
+      throw new Error('automation_target_changed')
+    }
     const runId = randomUUID()
     const effectivePrompt = composeViewerAutomationPrompt(
       automation.prompt,

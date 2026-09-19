@@ -15,6 +15,7 @@ const bindingSchema = viewerScopeSchema.extend({
   workspaceRoot: z.string(),
   datasetRelativePath: z.string(),
   automationId: z.string(),
+  automationTargetKey: z.string().optional(),
   projectName: z.string(),
   automationName: z.string(),
   expectedOwner: z.object({ selector: z.object({ kind: z.literal('self') }) })

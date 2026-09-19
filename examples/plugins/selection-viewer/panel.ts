@@ -98,7 +98,10 @@ send.addEventListener('click', async (event) => {
     pending = null
   } catch (error) {
     message.textContent = `${String(error)}。受付状況を確認してください。`
-    if (/data_changed|binding_changed|input_too_large|request_expired/.test(String(error))) {
+    if (String(error).includes('automation_target_changed')) {
+      pending = null
+      message.textContent = '実行先が変更されました。接続設定を保存し直してください。'
+    } else if (/data_changed|binding_changed|input_too_large|request_expired/.test(String(error))) {
       pending = null
       message.textContent = `${String(error)}。データを再読込してから再実行してください。`
     } else {

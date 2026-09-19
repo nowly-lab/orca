@@ -1,3 +1,4 @@
+import { viewerAutomationTargetKey } from './viewer-automation-target'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -57,6 +58,7 @@ async function fixture() {
     workspaceRoot: dir,
     datasetRelativePath: 'items.json',
     automationId: automation.id,
+    automationTargetKey: viewerAutomationTargetKey(automation),
     expectedOwner: { selector: { kind: 'self' } },
     projectName: 'Test',
     automationName: 'Test'
@@ -220,4 +222,44 @@ it('retains active receipts beyond 24 hours but rejects an expired identity afte
   expect(f.state.viewerInvocations?.some((row) => row.runId === first.runId)).toBe(false)
   await expect(f.runner.dispatch(f.binding, f.input)).rejects.toThrow('request_expired')
   expect(f.dispatch).toHaveBeenCalledTimes(3)
+})
+
+it('requires rebinding when the automation execution workspace changes', async () => {
+  const f = await fixture()
+  for (const change of [
+    { workspaceId: 'another-workspace' },
+    { projectId: 'another-repo' },
+    { workspaceMode: 'new_per_run' as const, workspaceId: null }
+  ]) {
+    f.validate.mockResolvedValue({ ...f.automation, ...change })
+    await expect(f.runner.dispatch(f.binding, f.input)).rejects.toThrow('automation_target_changed')
+  }
+  expect(f.dispatch).not.toHaveBeenCalled()
+  expect(f.state.automationRuns).toEqual([])
+})
+it('never revives a collected receipt after a forward clock jump and correction', async () => {
+  const f = await fixture()
+  await f.runner.dispatch(f.binding, f.input)
+  f.state.automationRuns = f.state.automationRuns.map((run) => ({ ...run, status: 'completed' }))
+  const future = (f.state.viewerInvocations?.[0]?.createdAt ?? f.input.requestedAt) + 86400001
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(future)
+  await f.runner.dispatch(f.binding, { ...f.input, requestId: 'future', requestedAt: future })
+  expect(f.state.viewerInvocations?.some((row) => row.key.includes('"request"'))).toBe(false)
+  f.state.automationRuns = []
+  clock.mockReturnValue(f.input.requestedAt)
+  await expect(new ViewerRunService(f.deps).dispatch(f.binding, f.input)).rejects.toThrow(
+    'request_expired'
+  )
+  expect(f.dispatch).toHaveBeenCalledTimes(2)
+})
+
+it('permits prompt and schedule edits that preserve the connected execution target', async () => {
+  const f = await fixture()
+  f.validate.mockResolvedValue({
+    ...f.automation,
+    prompt: 'Edited instructions',
+    rrule: 'FREQ=WEEKLY'
+  })
+  await f.runner.dispatch(f.binding, f.input)
+  expect(f.dispatch.mock.calls[0][0].prompt).toContain('Edited instructions')
 })

@@ -31,3 +31,5 @@ Manifest の `contributes.panels` に `"placement": "tab"` と HTML の `entry` 
 v1 はローカル Desktop の Git・folder workspace 対応です。SSH と Web client は未対応として表示し、ローカル実行へ切り替えることはありません。
 
 Folder workspace では同じプロジェクトグループ配下のローカルリポジトリに登録された automation を選べます。データはその Folder workspace 内から読み込みます。
+
+接続後に automation の実行先を変えた場合は、Viewer の接続設定を保存し直してください。受付直後にアプリが終了した場合も自動で再実行せず、復旧後に中断した実行として表示します。時計の修正後も、受付記録を整理済みの古い要求は再実行しません。
