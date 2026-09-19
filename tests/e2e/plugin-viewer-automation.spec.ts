@@ -6,7 +6,7 @@ import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 test('custom viewer selects records and dispatches a fixture automation through IPC', async ({
   orcaPage
-}) => {
+}, testInfo) => {
   await waitForSessionReady(orcaPage)
   const workspaceId = await waitForActiveWorktree(orcaPage)
   const temp = await mkdtemp(join(tmpdir(), 'orca-viewer-e2e-'))
@@ -36,6 +36,7 @@ test('custom viewer selects records and dispatches a fixture automation through 
         }
         const settings = await window.api.settings.set({
           uiLanguage: 'en',
+          theme: 'light',
           pluginSystemEnabled: true,
           devPluginPaths: [pluginRoot, secondRoot]
         })
@@ -91,7 +92,8 @@ test('custom viewer selects records and dispatches a fixture automation through 
       JSON.stringify({
         items: [
           { id: 'a', title: '候補A' },
-          { id: 'b', title: '候補B' }
+          { id: 'b', title: '候補B' },
+          { id: 'c', title: '商品ページの説明文を見直し、変更点と次の対応をまとめる' }
         ]
       })
     )
@@ -104,6 +106,45 @@ test('custom viewer selects records and dispatches a fixture automation through 
     await orcaPage.getByRole('button', { name: 'Save connection', exact: true }).click()
     const frame = orcaPage.frameLocator('iframe[title="Selection Viewer"]:visible')
     await expect(frame.getByRole('checkbox', { name: '候補A', exact: true })).toBeVisible()
+    const viewer = orcaPage.locator('iframe[title="Selection Viewer"]:visible')
+    await frame.getByRole('searchbox', { name: 'タスクを検索' }).fill('説明文')
+    await expect(frame.getByRole('checkbox', { name: '候補A', exact: true })).toBeHidden()
+    await expect(frame.getByText('1 / 3件', { exact: true })).toBeVisible()
+    await frame.getByRole('button', { name: '検索をクリア' }).click()
+    await expect(frame.getByRole('searchbox')).toBeFocused()
+    await viewer.screenshot({ path: testInfo.outputPath('viewer-light.png') })
+    await viewer.evaluate((element) => {
+      element.style.width = '360px'
+      element.style.maxWidth = '360px'
+      element.style.minWidth = '0'
+    })
+    await expect.poll(() => viewer.evaluate((element) => element.clientWidth)).toBe(360)
+    await expect(frame.getByRole('button', { name: 'このタスクを実行' }).first()).toBeVisible()
+    expect(
+      await frame
+        .locator('body')
+        .evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+        )
+    ).toBe(true)
+    await viewer.screenshot({ path: testInfo.outputPath('viewer-narrow.png') })
+    await viewer.evaluate((element) => {
+      element.style.width = ''
+      element.style.maxWidth = ''
+      element.style.minWidth = ''
+    })
+    await orcaPage.evaluate(async () => {
+      const settings = await window.api.settings.set({ theme: 'dark' })
+      window.__store?.setState({ settings })
+    })
+    await expect(frame.locator('html')).toHaveClass(/dark/)
+    await expect(frame.getByRole('checkbox', { name: '候補A', exact: true })).toBeVisible()
+    await viewer.screenshot({ path: testInfo.outputPath('viewer-dark.png') })
+    await orcaPage.evaluate(async () => {
+      const settings = await window.api.settings.set({ theme: 'light' })
+      window.__store?.setState({ settings })
+    })
+    await expect(frame.locator('html')).not.toHaveClass(/dark/)
     await frame.getByRole('checkbox', { name: '候補A', exact: true }).check()
     await frame.getByRole('checkbox', { name: '候補B', exact: true }).check()
     await frame.getByLabel('追加の指示').fill('選択された2件を処理してください')
@@ -152,7 +193,7 @@ test('custom viewer selects records and dispatches a fixture automation through 
     const html = await readFile(join(pluginRoot, 'panel.html'), 'utf8')
     await writeFile(
       join(pluginRoot, 'panel.html'),
-      html.replace('<body>', '<body><p>Viewer reloaded</p>')
+      html.replace(/<body([^>]*)>/, '<body$1><p>Viewer reloaded</p>')
     )
     await expect(frame.getByText('Viewer reloaded')).toBeVisible({ timeout: 15000 })
     await expect(frame.getByLabel('追加の指示')).toHaveValue('')
