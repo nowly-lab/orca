@@ -138,7 +138,9 @@ function buildLegacyNavOrderView(
   return {
     activeGroupIdByWorktree: inputs.activeGroupId ? { [worktreeId]: inputs.activeGroupId } : {},
     groupsByWorktree: { [worktreeId]: inputs.groups },
-    unifiedTabsByWorktree: { [worktreeId]: inputs.unifiedTabs },
+    unifiedTabsByWorktree: {
+      [worktreeId]: inputs.unifiedTabs.filter((tab) => tab.contentType !== 'plugin-viewer')
+    },
     tabBarOrderByWorktree: inputs.tabBarOrder ? { [worktreeId]: inputs.tabBarOrder } : {},
     tabsByWorktree: { [worktreeId]: inputs.terminalTabs },
     openFiles: inputs.openFilesById ? [...inputs.openFilesById.values()] : [],
@@ -172,7 +174,9 @@ export function buildMobileSessionGroupProjection(
   const order: VisibleTabRef[] = []
   const tabGroups: RuntimeMobileSessionTabGroup[] = []
   for (const group of getOrderedTabGroups(groups, inputs.tabGroupLayout)) {
-    const groupTabs = inputs.unifiedTabs.filter((tab) => tab.groupId === group.id)
+    const groupTabs = inputs.unifiedTabs.filter(
+      (tab) => tab.groupId === group.id && tab.contentType !== 'plugin-viewer'
+    )
     const visibleOrder = getGroupVisibleTabOrder(
       group,
       groupTabs,

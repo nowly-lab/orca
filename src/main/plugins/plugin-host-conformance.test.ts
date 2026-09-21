@@ -121,15 +121,30 @@ const successParams: Record<string, unknown> = {
 }
 
 describe('plugin host main/relay conformance', () => {
-  it('runs a granted success through both transports for all 13 v0 methods', async () => {
-    expect(PLUGIN_HOST_API_V0).toHaveLength(13)
+  it('rejects viewer methods on workers and unbound panel transports', async () => {
+    for (const spec of PLUGIN_HOST_API_V0.filter((entry) => entry.scope === 'viewer-session')) {
+      const policy = createPolicy([spec.capability])
+      for (const adapter of Object.values(createAdapters(() => policy))) {
+        for (const viaPanel of [true, false]) {
+          expect(await adapter({ method: spec.name, params: {} }, viaPanel)).toMatchObject({
+            ok: false,
+            error: 'viewer session required'
+          })
+        }
+      }
+    }
+  })
+  it('runs granted non-viewer methods identically through both transports', async () => {
+    expect(PLUGIN_HOST_API_V0).toHaveLength(17)
     expect(Object.keys(successParams).sort()).toEqual(
-      PLUGIN_HOST_API_V0.map((entry) => entry.name).sort()
+      PLUGIN_HOST_API_V0.filter((entry) => entry.scope !== 'viewer-session')
+        .map((entry) => entry.name)
+        .sort()
     )
     expect(PLUGIN_HOST_API_V0.every((entry) => entry.stability === 'experimental')).toBe(true)
     expect(PLUGIN_HOST_API_V0.every((entry) => entry.scope.length > 0)).toBe(true)
 
-    for (const spec of PLUGIN_HOST_API_V0) {
+    for (const spec of PLUGIN_HOST_API_V0.filter((entry) => entry.scope !== 'viewer-session')) {
       const policy = createPolicy([spec.capability])
       const resolvePolicy = vi.fn().mockResolvedValue(policy)
       const outcomes = await Promise.all(

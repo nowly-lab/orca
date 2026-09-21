@@ -19,7 +19,9 @@ export const PLUGIN_CAPABILITY_KINDS = [
   'storage',
   'secrets',
   'events:subscribe',
-  'settings:own'
+  'settings:own',
+  'viewer:read',
+  'automation:run'
 ] as const
 
 export type PluginCapabilityKind = (typeof PLUGIN_CAPABILITY_KINDS)[number]
@@ -33,6 +35,8 @@ export type PluginCapability = z.infer<typeof pluginCapabilitySchema>
 /** Plain-language consent copy per capability. Shown verbatim in the install
  *  preview / consent dialog; keep each line honest about what is enforced. */
 export const PLUGIN_CAPABILITY_DESCRIPTIONS: Record<PluginCapabilityKind, string> = {
+  'viewer:read': 'Read the dataset and run history connected to this viewer',
+  'automation:run': 'Run the connected automation with selected records and text input',
   'workspace:read': 'Read the name, branch, and terminal list of your focused worktree',
   'terminal:send': 'Type text into a terminal you can see (always a specific terminal)',
   'notifications:show': 'Show desktop notifications labeled with the plugin name',

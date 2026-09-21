@@ -1,3 +1,4 @@
+import type { ViewerCallContext } from '../../shared/plugins/viewer-contract'
 import { getBoundPluginHostMethod, type PluginHostServices } from './plugin-host-method-bindings'
 import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
 import { gatePluginHostCall as decidePluginHostCall } from '../../shared/plugins/plugin-capability-gate'
@@ -22,6 +23,7 @@ export type ExecutePluginHostCallInput = {
   params: unknown
   /** True when the call arrives over the sandboxed panel bridge. */
   viaPanel: boolean
+  viewer?: ViewerCallContext
   /** Consented capability kinds; null = unknown/disabled/consent-stale. */
   grantedCapabilities: readonly PluginCapabilityKind[] | null
   services: PluginHostServices | null
@@ -44,6 +46,12 @@ export async function executePluginHostCall(
   const bound = getBoundPluginHostMethod(input.method)
   if (!bound) {
     return { ok: false, code: 'unknown_method', error: `unknown host method: ${input.method}` }
+  }
+  if (
+    input.method.startsWith('viewer.') &&
+    (!input.viaPanel || !input.viewer || input.viewer.scope.pluginKey !== input.pluginId)
+  ) {
+    return { ok: false, code: 'unavailable', error: 'viewer session required' }
   }
   const parsedParams = bound.spec.params.safeParse(input.params)
   if (!parsedParams.success) {
@@ -92,7 +100,8 @@ export async function executePluginHostCall(
   try {
     const value = await bound.handler(parsedParams.data, {
       pluginId: input.pluginId,
-      services: input.services
+      services: input.services,
+      viewer: input.viewer
     })
     const validated = bound.spec.result.safeParse(value)
     if (!validated.success) {

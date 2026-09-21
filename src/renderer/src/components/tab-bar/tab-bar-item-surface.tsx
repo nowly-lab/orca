@@ -186,7 +186,7 @@ export function renderTabBarItems({
         />
       )
     }
-    if (item.type === 'simulator') {
+    if (item.type === 'simulator' || item.type === 'plugin-viewer') {
       const simulatorLabel = item.data.label || 'Mobile Emulator'
       const simulatorFile: OpenFile & { tabId: string } = {
         id: item.id,
@@ -194,7 +194,7 @@ export function renderTabBarItems({
         filePath: simulatorLabel,
         relativePath: simulatorLabel,
         worktreeId,
-        language: 'simulator',
+        language: item.type,
         isPreview: false,
         isDirty: false,
         mode: 'edit'
@@ -205,8 +205,9 @@ export function renderTabBarItems({
           file={simulatorFile}
           isActive={
             !clientHostedRowOwnsActiveState &&
-            activeTabType === 'simulator' &&
-            item.id === activeSimulatorTabId
+            (item.type === 'plugin-viewer'
+              ? props.groupActiveTabId === item.id
+              : activeTabType === 'simulator' && item.id === activeSimulatorTabId)
           }
           isPinned={item.isPinned}
           hasTabsToRight={index < items.length - 1}

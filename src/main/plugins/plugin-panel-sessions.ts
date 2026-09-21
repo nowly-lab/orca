@@ -1,3 +1,4 @@
+import type { ViewerCallContext } from '../../shared/plugins/viewer-contract'
 import { randomBytes } from 'node:crypto'
 
 export type PluginPanelSessionBinding = {
@@ -5,6 +6,7 @@ export type PluginPanelSessionBinding = {
   panelId: string
   rootDir: string
   manifestRevision: string
+  viewer?: ViewerCallContext
 }
 
 type PluginPanelSession = PluginPanelSessionBinding & {
@@ -19,7 +21,8 @@ function bindingKey(ownerKey: string, binding: PluginPanelSessionBinding): strin
     binding.pluginKey,
     binding.panelId,
     binding.rootDir,
-    binding.manifestRevision
+    binding.manifestRevision,
+    binding.viewer ?? null
   ])
 }
 
@@ -60,7 +63,8 @@ export class PluginPanelSessions {
       pluginKey: session.pluginKey,
       panelId: session.panelId,
       rootDir: session.rootDir,
-      manifestRevision: session.manifestRevision
+      manifestRevision: session.manifestRevision,
+      ...(session.viewer ? { viewer: session.viewer } : {})
     }
   }
 

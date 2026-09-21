@@ -42,6 +42,7 @@ const orcaEngineRangeSchema = z
   .regex(/^>=\d+\.\d+\.\d+$/, 'must be a ">=x.y.z" version range')
 
 const panelContributionSchema = z.object({
+  placement: z.enum(['sidebar', 'tab']).optional(),
   id: pluginIdSchema,
   title: z.string().min(1).max(256),
   /** Lucide icon name rendered in the right-sidebar activity bar. */
@@ -84,7 +85,10 @@ export const pluginManifestSchema = z
     version: z.string().regex(SEMVER_RE, 'must be semver'),
     description: z.string().max(4096).optional(),
     author: z
-      .object({ name: z.string().min(1).max(256), url: z.string().max(2048).optional() })
+      .object({
+        name: z.string().min(1).max(256),
+        url: z.string().max(2048).optional()
+      })
       .optional(),
     repository: z.string().max(2048).optional(),
     icon: pluginRelativePathSchema.optional(),
@@ -159,7 +163,10 @@ export function parsePluginManifest(raw: unknown): PluginManifestParseResult {
   }
   const issue = parsed.error.issues[0]
   const path = issue?.path.join('.') || '(root)'
-  return { ok: false, error: `${path}: ${issue?.message ?? 'invalid manifest'}` }
+  return {
+    ok: false,
+    error: `${path}: ${issue?.message ?? 'invalid manifest'}`
+  }
 }
 
 /** v0 engines gate: supports the ">=x.y.z" grammar the schema enforces.

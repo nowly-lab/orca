@@ -1,3 +1,4 @@
+import type { ViewerRunMetadata } from './viewer-automation-prompt'
 import type { TuiAgent } from './tui-agent'
 import type { SetupDecision } from './worktree/create-types'
 import type { TaskSourceContext, WorkspaceRunContext } from './task-source-context'
@@ -133,6 +134,7 @@ export type Automation = {
 }
 
 export type AutomationRun = {
+  viewer?: ViewerRunMetadata
   id: string
   automationId: string
   runContext?: WorkspaceRunContext | null

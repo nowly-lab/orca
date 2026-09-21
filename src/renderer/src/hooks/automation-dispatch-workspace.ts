@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/automations-types'
 import { getAutomationRunRepoId } from '../../../shared/automation-run-identity'
 import {
+  shouldRunAutomationPrecheck,
   didAutomationPrecheckPass,
   formatAutomationPrecheckFailure
 } from '../../../shared/automation-precheck'
@@ -164,7 +165,7 @@ export async function prepareAutomationDispatchWorkspace(args: {
     return null
   }
 
-  if (run.trigger === 'scheduled' && automation.precheck) {
+  if (shouldRunAutomationPrecheck(run) && automation.precheck) {
     context.precheckResult = await window.api.automations.runPrecheck({
       automationId: automation.id,
       runId: run.id

@@ -1,3 +1,4 @@
+import type { ViewerCallContext } from '../../shared/plugins/viewer-contract'
 import type {
   PluginPanelActionOutcome,
   PluginPanelEntry
@@ -23,7 +24,8 @@ type PluginPanelControllerOptions = {
   executeHostCall: (
     pluginKey: string,
     method: string,
-    params: unknown
+    params: unknown,
+    viewer?: ViewerCallContext
   ) => Promise<PluginPanelActionOutcome>
   log: (pluginKey: string, line: string) => void
   panelAdmission?: PluginPanelCallAdmission
@@ -50,15 +52,22 @@ export class PluginPanelController {
   async open(
     ownerKey: string,
     pluginKey: string,
-    panelId: string
+    panelId: string,
+    viewer?: ViewerCallContext
   ): Promise<PluginPanelEntry | null> {
     const loaded = await this.load(pluginKey, panelId)
     if (!loaded) {
       return null
     }
+    if (viewer && (viewer.scope.pluginKey !== pluginKey || viewer.scope.panelId !== panelId)) {
+      throw new Error('invalid_viewer_scope')
+    }
     return {
       ...loaded.entry,
-      sessionToken: this.sessions.issue(ownerKey, loaded.binding)
+      sessionToken: this.sessions.issue(ownerKey, {
+        ...loaded.binding,
+        ...(viewer ? { viewer } : {})
+      })
     }
   }
 
@@ -91,7 +100,15 @@ export class PluginPanelController {
     ) {
       return { ok: false, code: 'unavailable', error: 'panel session is no longer available' }
     }
-    return this.options.executeHostCall(binding.pluginKey, parsed.data.action, parsed.data.params)
+    if (!binding.viewer) {
+      return this.options.executeHostCall(binding.pluginKey, parsed.data.action, parsed.data.params)
+    }
+    return this.options.executeHostCall(
+      binding.pluginKey,
+      parsed.data.action,
+      parsed.data.params,
+      binding.viewer
+    )
   }
 
   revokeOwner(ownerKey: string): void {

@@ -98,6 +98,9 @@ export function useTabGroupActivationCommands({
       }
       focusGroup(worktreeId, groupId)
       activateTab(item.id)
+      if (item.contentType === 'plugin-viewer') {
+        return
+      }
       if (item.contentType === 'simulator') {
         setActiveTabType('simulator')
         // simulator has no editor file entity

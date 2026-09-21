@@ -48,6 +48,9 @@ export function getGroupVisibleTabOrder(
     if (tab.contentType === 'simulator') {
       return simulatorTabIds.has(tab.id) ? { type: 'simulator', id: tab.id, tabId: tab.id } : null
     }
+    if (tab.contentType === 'plugin-viewer') {
+      return { type: 'editor', id: tab.id, tabId: tab.id }
+    }
     if (tab.contentType === 'agent-session') {
       // Structured chat tabs are self-backed: the unified tab is the entity, so none can be stale.
       return { type: 'agent-session', id: tab.entityId, tabId: tab.id }

@@ -1,3 +1,5 @@
+import type { ViewerCallContext } from '../../shared/plugins/viewer-contract'
+import type { ViewerHostMethods } from './viewer-host-methods'
 import {
   getPluginHostMethodSpec,
   PLUGIN_HOST_API_V0,
@@ -17,6 +19,7 @@ export type PluginWorktreeContext = {
 /** Structural service surface the facade delegates to. Desktop main binds it
  *  over runtime services; relay policy and conformance tests bind fakes. */
 export type PluginHostServices = {
+  viewer?: ViewerHostMethods
   resolveActiveWorktreeContext(): Promise<PluginWorktreeContext | null>
   listWorktreeTerminals(worktreeId: string): Promise<{ id: string }[]>
   sendTerminalText(
@@ -53,7 +56,7 @@ export type BoundPluginHostMethod = {
   spec: PluginHostMethodSpec
   handler: (
     params: unknown,
-    ctx: { pluginId: string; services: PluginHostServices }
+    ctx: { pluginId: string; services: PluginHostServices; viewer?: ViewerCallContext }
   ) => Promise<unknown>
 }
 
@@ -69,6 +72,14 @@ function definePluginMethod(
 }
 
 const HANDLERS = new Map<string, BoundPluginHostMethod>([
+  ...['viewer.context', 'viewer.data', 'viewer.dispatch', 'viewer.runs'].map((name) =>
+    definePluginMethod(name, async (params, ctx) => {
+      if (!ctx.viewer || !ctx.services.viewer) {
+        throw new Error('viewer session required')
+      }
+      return ctx.services.viewer.call(name, ctx.viewer, params)
+    })
+  ),
   definePluginMethod('workspace.readContext', async (_params, { services }) => {
     const context = await services.resolveActiveWorktreeContext()
     if (!context) {

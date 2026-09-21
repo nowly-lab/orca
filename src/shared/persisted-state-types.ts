@@ -1,3 +1,4 @@
+import type { ViewerInvocationReceipt } from './viewer-automation-prompt'
 import type { ExecutionHostId } from './execution-host'
 import type {
   RemovedSshTargetTombstone,
@@ -109,6 +110,9 @@ export type PersistedState = {
   legacyPaneKeyAliasEntries: LegacyPaneKeyAliasEntry[]
   automations: Automation[]
   automationRuns: AutomationRun[]
+  viewerInvocations?: ViewerInvocationReceipt[]
+  /** Retired request timestamps stay retired across clock corrections and restarts. */
+  viewerInvocationExpiredBefore?: number
   onboarding: OnboardingState
   /** Main-owned telemetry de-dupe marker; never exposed through PersistedUIState. */
   featureInteractionTelemetryBuckets?: FeatureInteractionTelemetryBucketState

@@ -1,3 +1,7 @@
+import {
+  createViewerInvocation,
+  type CreateViewerInvocation
+} from '../scheduling-automations/viewer-invocation-operations'
 import type {
   Automation,
   AutomationCreateInput,
@@ -152,6 +156,21 @@ export class AutomationPersistence {
 
   deleteAutomation(id: string, options?: { expectedOwner?: AutomationOwnerPrecondition }): void {
     deleteAutomationOperation(getAutomationDefinitionOperations(this), id, options)
+  }
+
+  createViewerInvocation(automation: Automation, input: CreateViewerInvocation) {
+    return createViewerInvocation(
+      {
+        ...getAutomationRunOperations(this),
+        flush: () => this[automationPersistenceContext].flushBarriers.flushOrThrow()
+      },
+      automation,
+      input
+    )
+  }
+
+  listViewerInvocations() {
+    return this[automationPersistenceContext].runtime.state.viewerInvocations ?? []
   }
 
   createAutomationRun(

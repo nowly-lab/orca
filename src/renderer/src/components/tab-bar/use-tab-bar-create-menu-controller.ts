@@ -8,9 +8,11 @@ import {
   shouldQueueTerminalFocusAfterMenuClose
 } from '@/lib/launch-agent-in-new-tab'
 import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
+import { useTabCreateMenuOptions } from './use-tab-create-menu-options'
+import { openViewerMenuOption } from './viewer-tab-menu'
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
-import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
+import type { TabCreateMenuOption } from './tab-create-menu-options'
 import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
 import {
   buildWindowsShellMenuEntries,
@@ -159,35 +161,24 @@ export function useTabBarCreateMenuController({
     windowsTerminalCapabilities.gitBashAvailable,
     windowsTerminalCapabilities.wslAvailable
   ])
-  const createMenuOptions = useMemo(
-    () =>
-      buildTabCreateMenuOptions({
-        terminalOnly,
-        windowsShellEntries,
-        hasNewBrowser: !terminalOnly && managedBrowserCreationEnabled,
-        hasNewMarkdown: !terminalOnly && Boolean(onNewFileTab),
-        hasOpenMarkdown: !terminalOnly && Boolean(onOpenFileTab),
-        hasSimulator:
-          !terminalOnly &&
-          mobileEmulatorEnabled &&
-          mobileEmulatorCreationEnabled &&
-          Boolean(onNewSimulatorTab),
-        simulatorIsGoTo: workspaceHasSimulatorTab
-      }),
-    [
-      mobileEmulatorEnabled,
-      managedBrowserCreationEnabled,
-      mobileEmulatorCreationEnabled,
-      onNewFileTab,
-      onNewSimulatorTab,
-      onOpenFileTab,
-      terminalOnly,
-      windowsShellEntries,
-      workspaceHasSimulatorTab
-    ]
-  )
+  const createMenuOptions = useTabCreateMenuOptions({
+    terminalOnly,
+    windowsShellEntries,
+    hasNewBrowser: !terminalOnly && managedBrowserCreationEnabled,
+    hasNewMarkdown: !terminalOnly && Boolean(onNewFileTab),
+    hasOpenMarkdown: !terminalOnly && Boolean(onOpenFileTab),
+    hasSimulator:
+      !terminalOnly &&
+      mobileEmulatorEnabled &&
+      mobileEmulatorCreationEnabled &&
+      Boolean(onNewSimulatorTab),
+    simulatorIsGoTo: workspaceHasSimulatorTab
+  })
   const handleSelectCreateMenuOption = (option: TabCreateMenuOption): void => {
     switch (option.kind) {
+      case 'plugin-viewer':
+        openViewerMenuOption(useAppStore.getState(), worktreeId, option)
+        break
       case 'new-terminal':
         queueNewActiveTerminalFocusAfterNewTabMenuClose()
         onNewTerminalTab()
